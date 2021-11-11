@@ -12,7 +12,8 @@
           foot = $('<dl>').appendTo(html);
     const rpgen3 = await importAll([
         'input',
-        'css'
+        'css',
+        'url'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
     Promise.all([
         'table'
@@ -28,7 +29,7 @@
         crossOrigin: 'anonymous',
         src: url
     }));
-    const img = new class {
+    const image = new class {
         constructor(){
             this.html = $('<div>').appendTo(body);
             this._load = makeLoadFunc(Image);
@@ -49,32 +50,34 @@
             }
         });
         selectImg.elm.on('change', () => {
-            img.load(`img/${selectImg()}`);
+            image.load(`img/${selectImg()}`);
         }).trigger('change');
         const inputURL = rpgen3.addInputStr(head, {
             label: '外部URL'
         });
         inputURL.elm.on('change', () => {
-            img.load(inputURL());
+            const urls = rpgen3.findURL(inputURL());
+            if(urls.length) image.load(urls[0]);
         });
         $('<input>').appendTo(head).prop({
             type: 'file'
         }).on('change', ({target}) => {
-            img.load(URL.createObjectURL(target.files[0]));
+            const {files} = target;
+            if(files.length) image.load(URL.createObjectURL(files[0]));
         });
     }
     const kernel = new class {
         constructor(){
             this.html = $('<table>').appendTo(body);
-            this.list = [];
             this.k = 0;
+            this.list = [];
         }
         toI(x, y){
             return x + y * this.k;
         }
         resize(k){
-            const list = [],
-                  _k = k - this.k >> 1;
+            const _k = k - this.k >> 1,
+                  list = [];
             this.html.empty();
             for(const y of Array(k).keys()) {
                 const tr = $('<tr>').appendTo(this.html);
@@ -106,6 +109,15 @@
     inputKernelSize.elm.on('change', () => {
         kernel.resize(inputKernelSize());
     }).trigger('change');
+    const selectOutline = rpgen3.addSelect(body, {
+        label: '外周画像の処理',
+        list: {
+            '外周部分の画素値をコピー': 0,
+            '外周部分を中心にして対称の位置をコピー': 1,
+            '全部黒': 2,
+            'カーネルの形を変える': 3
+        }
+    });
     addBtn(body, '処理開始', () => spatialFilter());
     const msg = new class {
         constructor(){
@@ -117,10 +129,39 @@
         }
     };
     const spatialFilter = async () => {
-        const {width, height} = img.img,
+        const outline = selectOutline(),
+              {k, list} = kernel,
+              _list = list.slice(),
+              {img} = image,
+              {width, height} = img,
               cv = $('<canvas>').prop({width, height}),
               ctx = cv.get(0).getContext('2d');
-        ctx.drawImage(img.img, 0, 0);
+        ctx.drawImage(img, 0, 0);
         const {data} = ctx.getImageData(0, 0, width, height);
+        makeBigImg({width, height, data, k, outline});
+    };
+    const makeBigImg = ({width, height, data, k, outline}) => {
+        const _k = k >> 1,
+              __k = _k << 1,
+              _width = width + __k,
+              _height = height + __k,
+              _data = new Uint8ClampedArray(_width * _height << 2);
+        for(const i of Array(width * height).keys()) {
+            const x = i % width,
+                  y = i / width | 0,
+                  _i = x + y * _width << 2,
+                  __i = i << 2;
+            Object.assign(_data.subarray(_i, _i + 4), data.subarray(__i, __i + 4));
+        }
+        if(outline === 2 || outline === 3) return _data;
+        // 左上
+        /*{
+            for(const y of Array(_k).keys()) {
+                for(const x of Array(_k).keys()) {
+                    y - _k
+                    x - _k
+                }
+            }
+        }*/
     };
 })();
