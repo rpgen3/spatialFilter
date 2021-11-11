@@ -118,34 +118,39 @@
             'カーネルの形を変える': 3
         }
     });
-    addBtn(body, '処理開始', () => spatialFilter());
+    addBtn(body, '処理開始', () => start());
     const msg = new class {
         constructor(){
             this.html = $('<div>').appendTo(foot);
         }
         async print(str){
             this.html.text(str);
-            await sleep(10);
+            await sleep(0);
         }
     };
-    const spatialFilter = async () => {
+    const hOutput = $('<div>').appendTo(foot);
+    const start = async () => {
         const outline = selectOutline(),
               {k, list} = kernel,
               _list = list.slice(),
               {img} = image,
               {width, height} = img,
-              cv = $('<canvas>').prop({width, height}),
-              ctx = cv.get(0).getContext('2d');
+              [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        const {data} = ctx.getImageData(0, 0, width, height);
-        makeBigImg({width, height, data, k, outline});
-    };
-    const makeBigImg = ({width, height, data, k, outline}) => {
-        const _k = k >> 1,
+        const {data} = ctx.getImageData(0, 0, width, height),
+              _k = k >> 1,
               __k = _k << 1,
               _width = width + __k,
-              _height = height + __k,
-              _data = new Uint8ClampedArray(_width * _height << 2);
+              _height = height + __k;
+        const result = await spatialFilter({
+            width, height, k, _k, __k, _width, _height, outline, data,
+            data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
+            list: _list
+        });
+        output({data, width, height, _width, _height, _k}).appendTo(hOutput.empty());
+    };
+    const makeBigImg = async ({width, height, k, _k, __k, _width, _height, outline, data}) => {
+        const _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
             const x = i % width,
                   y = i / width | 0,
@@ -163,5 +168,39 @@
                 }
             }
         }*/
+    };
+    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list}) => {
+        const _data = data.slice(),
+              toI = (x, y) => x + y * _width,
+              len = width * height;
+        for(const i of Array(len).keys()) {
+            await msg.print(`${i}/${len}`);
+            const x = (i % width) + _k,
+                  y = (i / width | 0) + _k,
+                  sum = [...new Array(4).fill(0)];
+            for(const [i, v] of list.entries()) {
+                const _x = i % k,
+                      _y = i / k | 0,
+                      _i = toI(
+                          x + _x - _k,
+                          y + _y - _k
+                      ) << 1,
+                      rgba = data.subarray(_i, _i + 4);
+                for(let i = 0; i < 4; i++) sum[i] += rgba[i] * v;
+            }
+            const _i = toI(x, y) << 1;
+            Object.assign(_data.subarray(_i, _i + 4), sum);
+        }
+        return _data;
+    };
+    const output = ({data, width, height, _width, _height, _k}) => {
+        const [cv, ctx] = makeCanvas(width, height);
+        ctx.putImageData(new ImageData(data, _width, _height), -_k, -_k);
+        return cv;
+    };
+    const makeCanvas = (width, height) => {
+        const cv = $('<canvas>').prop({width, height}),
+              ctx = cv.get(0).getContext('2d');
+        return [cv, ctx];
     };
 })();
