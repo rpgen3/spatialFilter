@@ -12,17 +12,11 @@
           foot = $('<dl>').appendTo(html);
     const rpgen3 = await importAll([
         'input',
-        'util',
-        'random',
         'css'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
-    const {LayeredCanvas, lerp} = await importAll([
-        'LayeredCanvas',
-        'lerp'
-    ].map(v => `https://rpgen3.github.io/maze/mjs/sys/${v}.mjs`));
-    const rpgen4 = await importAll([
-        'bfs'
-    ].map(v => `https://rpgen3.github.io/dot/mjs/${v}.mjs`));
+    Promise.all([
+        'table'
+    ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     const addBtn = (h, ttl, func) => $('<button>').appendTo(h).text(ttl).on('click', func);
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     $('<div>').appendTo(head).text('空間フィルタリングのテスト');
@@ -73,26 +67,32 @@
         constructor(){
             this.html = $('<table>').appendTo(body);
             this.list = [];
+            this.k = 0;
         }
         toI(x, y){
-            return x + y * this.list.length;
+            return x + y * this.k;
         }
         resize(k){
-            const _k = Math.sqrt(this.list),
-                  sub = k - _k,
-                  newlist = [];
+            const list = [],
+                  _k = k - this.k >> 1;
             this.html.empty();
             for(const y of Array(k).keys()) {
                 const tr = $('<tr>').appendTo(this.html);
                 for(const x of Array(k).keys()) {
-                    const n = this.toI(...[x, y].map(v => v - sub)) || 0;
-                    newlist.push(n);
-                    $('<td>').prop({
+                    const [_x, _y] = [x, y].map(v => v - _k),
+                          n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[this.toI(_x, _y)] || 0;
+                    list.push(n);
+                    const td = $('<td>').appendTo(tr).prop({
                         contenteditable: true
-                    }).appendTo(tr).text(n);
+                    }).text(n).on('focusout', () => {
+                        const n = Number(td.text()) || 0;
+                        this.list[this.toI(x, y)] = n;
+                        td.text(n);
+                    });
                 }
             }
-            this.list = newlist;
+            this.k = k;
+            this.list = list;
         }
     };
     const inputKernelSize = rpgen3.addInputNum(body, {
@@ -100,7 +100,7 @@
         save: true,
         value: 3,
         min: 3,
-        max: 27,
+        max: 9,
         step: 2
     });
     inputKernelSize.elm.on('change', () => {
