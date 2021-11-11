@@ -31,7 +31,8 @@
     }));
     const image = new class {
         constructor(){
-            this.html = $('<div>').appendTo(body);
+            this.config = $('<div>').appendTo(head);
+            this.html = $('<div>').appendTo(head);
             this._load = makeLoadFunc(Image);
             this.img = null;
         }
@@ -40,7 +41,7 @@
         }
     };
     { // 画像入力
-        const selectImg = rpgen3.addSelect(head, {
+        const selectImg = rpgen3.addSelect(image.config, {
             label: 'サンプル画像',
             save: true,
             list: {
@@ -52,14 +53,14 @@
         selectImg.elm.on('change', () => {
             image.load(`img/${selectImg()}`);
         }).trigger('change');
-        const inputURL = rpgen3.addInputStr(head, {
+        const inputURL = rpgen3.addInputStr(image.config, {
             label: '外部URL'
         });
         inputURL.elm.on('change', () => {
             const urls = rpgen3.findURL(inputURL());
             if(urls.length) image.load(urls[0]);
         });
-        $('<input>').appendTo(head).prop({
+        $('<input>').appendTo(image.config).prop({
             type: 'file'
         }).on('change', ({target}) => {
             const {files} = target;
@@ -68,6 +69,7 @@
     }
     const kernel = new class {
         constructor(){
+            this.config = $('<div>').appendTo(body);
             this.html = $('<table>').appendTo(body);
             this.k = 0;
             this.list = [];
@@ -98,7 +100,7 @@
             this.list = list;
         }
     };
-    const inputKernelSize = rpgen3.addInputNum(body, {
+    const inputKernelSize = rpgen3.addInputNum(kernel.config, {
         label: 'カーネルサイズ[n x n]',
         save: true,
         value: 3,
@@ -109,6 +111,10 @@
     inputKernelSize.elm.on('change', () => {
         kernel.resize(inputKernelSize());
     }).trigger('change');
+    const isKernelSum1 = rpgen3.addInputBool(kernel.config, {
+        label: 'kernelの合計が1になるように総和で割る',
+        save: true
+    });
     const selectOutline = rpgen3.addSelect(body, {
         label: '外周画像の処理',
         list: {
@@ -130,7 +136,8 @@
     };
     const hOutput = $('<div>').appendTo(foot);
     const start = async () => {
-        const outline = selectOutline(),
+        const isSum1 = isKernelSum1(),
+              outline = selectOutline(),
               {k, list} = kernel,
               _list = list.slice(),
               {img} = image,
@@ -143,11 +150,11 @@
               _width = width + __k,
               _height = height + __k;
         const result = await spatialFilter({
-            width, height, k, _k, __k, _width, _height, outline, data,
+            width, height, k, _k, __k, _width, _height, outline, isSum1,
             data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
             list: _list
         });
-        output({data, width, height, _width, _height, _k}).appendTo(hOutput.empty());
+        output({data, width, height, _width, _height, _k});
     };
     const makeBigImg = async ({width, height, k, _k, __k, _width, _height, outline, data}) => {
         const _data = new Uint8ClampedArray(_width * _height << 2);
@@ -169,8 +176,9 @@
             }
         }*/
     };
-    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list}) => {
-        const _data = data.slice(),
+    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list, isSum1}) => {
+        const divide = isSum1 ? list.reduce((p, x) => p + x) : 1,
+              _data = data.slice(),
               toI = (x, y) => x + y * _width,
               len = width * height;
         for(const i of Array(len).keys()) {
@@ -189,14 +197,14 @@
                 for(let i = 0; i < 4; i++) sum[i] += rgba[i] * v;
             }
             const _i = toI(x, y) << 1;
-            Object.assign(_data.subarray(_i, _i + 4), sum);
+            Object.assign(_data.subarray(_i, _i + 4), sum.map(v => v / divide));
         }
         return _data;
     };
     const output = ({data, width, height, _width, _height, _k}) => {
         const [cv, ctx] = makeCanvas(width, height);
         ctx.putImageData(new ImageData(data, _width, _height), -_k, -_k);
-        return cv;
+        cv.appendTo(hOutput.empty());
     };
     const makeCanvas = (width, height) => {
         const cv = $('<canvas>').prop({width, height}),
