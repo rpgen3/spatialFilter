@@ -65,8 +65,62 @@
         });
         $('<input>').appendTo(head).prop({
             type: 'file'
-        }).on('change', async ({target}) => {
+        }).on('change', ({target}) => {
             img.load(URL.createObjectURL(target.files[0]));
         });
     }
+    const kernel = new class {
+        constructor(){
+            this.html = $('<table>').appendTo(body);
+            this.list = [];
+        }
+        toI(x, y){
+            return x + y * this.list.length;
+        }
+        resize(k){
+            const _k = Math.sqrt(this.list),
+                  sub = k - _k,
+                  newlist = [];
+            this.html.empty();
+            for(const y of Array(k).keys()) {
+                const tr = $('<tr>').appendTo(this.html);
+                for(const x of Array(k).keys()) {
+                    const n = this.toI(...[x, y].map(v => v - sub)) || 0;
+                    newlist.push(n);
+                    $('<td>').prop({
+                        contenteditable: true
+                    }).appendTo(tr).text(n);
+                }
+            }
+            this.list = newlist;
+        }
+    };
+    const inputKernelSize = rpgen3.addInputNum(body, {
+        label: 'カーネルサイズ[n x n]',
+        save: true,
+        value: 3,
+        min: 3,
+        max: 27,
+        step: 2
+    });
+    inputKernelSize.elm.on('change', () => {
+        kernel.resize(inputKernelSize());
+    }).trigger('change');
+    addBtn(body, '処理開始', () => spatialFilter());
+    const msg = new class {
+        constructor(){
+            this.html = $('<div>').appendTo(foot);
+        }
+        async print(str){
+            this.html.text(str);
+            await sleep(10);
+        }
+    };
+    const spatialFilter = async () => {
+        const {width, height} = img.img,
+              cv = $('<canvas>').prop({width, height}),
+              ctx = cv.get(0).getContext('2d');
+        ctx.drawImage(img.img, 0, 0);
+        const {data} = ctx.getImageData(0, 0, width, height);
+    };
 })();
