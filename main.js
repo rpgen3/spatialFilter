@@ -13,7 +13,8 @@
     const rpgen3 = await importAll([
         'input',
         'css',
-        'url'
+        'url',
+        'hankaku'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
     Promise.all([
         'table',
@@ -91,7 +92,7 @@
                     const td = $('<td>').appendTo(tr).prop({
                         contenteditable: true
                     }).text(n).on('focusout', () => {
-                        const n = Number(td.text()) || 0;
+                        const n = Number(rpgen3.toHan(td.text())) || 0;
                         this.list[this.toI(x, y)] = n;
                         td.text(n);
                     }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
@@ -119,6 +120,7 @@
     });
     const selectOutline = rpgen3.addSelect(body, {
         label: '外周画像の処理',
+        save: true,
         list: {
             '外周部分の画素値をコピー': 0,
             '外周部分を中心にして対称の位置をコピー': 1,
@@ -156,7 +158,7 @@
             data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
             list: _list
         });
-        output({data, width, height, _width, _height, _k});
+        output({data: result, width, height, _width, _height, _k});
     };
     const makeBigImg = async ({width, height, k, _k, __k, _width, _height, outline, data}) => {
         const _data = new Uint8ClampedArray(_width * _height << 2);
@@ -183,8 +185,9 @@
               _data = data.slice(),
               toI = (x, y) => x + y * _width,
               len = width * height;
+        let cnt = 0;
         for(const i of Array(len).keys()) {
-            await msg.print(`${i}/${len}`);
+            if(!(++cnt % 1000)) await msg.print(`${i}/${len}`);
             const x = (i % width) + _k,
                   y = (i / width | 0) + _k,
                   sum = [...new Array(4).fill(0)];
@@ -194,11 +197,11 @@
                       _i = toI(
                           x + _x - _k,
                           y + _y - _k
-                      ) << 1,
+                      ) << 2,
                       rgba = data.subarray(_i, _i + 4);
                 for(let i = 0; i < 4; i++) sum[i] += rgba[i] * v;
             }
-            const _i = toI(x, y) << 1;
+            const _i = toI(x, y) << 2;
             Object.assign(_data.subarray(_i, _i + 4), sum.map(v => v / divide));
         }
         return _data;
