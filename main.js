@@ -16,7 +16,8 @@
         'url'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
     Promise.all([
-        'table'
+        'table',
+        'kernel'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     const addBtn = (h, ttl, func) => $('<button>').appendTo(h).text(ttl).on('click', func);
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -93,7 +94,7 @@
                         const n = Number(td.text()) || 0;
                         this.list[this.toI(x, y)] = n;
                         td.text(n);
-                    });
+                    }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
                 }
             }
             this.k = k;
@@ -113,7 +114,8 @@
     }).trigger('change');
     const isKernelSum1 = rpgen3.addInputBool(kernel.config, {
         label: 'kernelの合計が1になるように総和で割る',
-        save: true
+        save: true,
+        value: true
     });
     const selectOutline = rpgen3.addSelect(body, {
         label: '外周画像の処理',
