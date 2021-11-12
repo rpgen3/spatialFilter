@@ -158,8 +158,7 @@
         list: {
             '外周部分の画素値をコピー': 0,
             '外周部分を中心にして対称の位置をコピー': 1,
-            '全部黒': 2,
-            'カーネルの形を変える': 3
+            '全部黒': 2
         }
     });
     const isIgnoredAlpha = rpgen3.addInputBool(body, {
@@ -205,19 +204,18 @@
         return [cv, ctx];
     };
     const start = async () => {
-        const outline = selectOutline(),
-              {k, list} = kernel,
+        const {k, list} = kernel,
               {img} = image,
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
-            data: ctx.getImageData(0, 0, width, height).data, width, height, k, outline
+            data: ctx.getImageData(0, 0, width, height).data, width, height, k
         }),
               dataLuminance = await makeDataLuminance(dataOutlined); // 輝度値を計算した配列
         const result = await spatialFilter({
-            dataOutlined, dataLuminance,
-            width, height, k, outline,
+            dataLuminance, width, height, k,
+            data: dataOutlined,
             list: list.slice()
         });
         output.show({data: result, width, height, k});
@@ -229,7 +227,7 @@
               _height = height + __k; // 外周を埋めた高さ
         return {_k, __k, _width, _height};
     };
-    const makeDataOutlined = async ({data, width, height, k, outline}) => {
+    const makeDataOutlined = async ({data, width, height, k}) => {
         const {_k, __k, _width, _height} = calcAny({k, width, height}),
               _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
@@ -239,10 +237,9 @@
                   b = (x + _k) + (y + _k) * _width << 2;
             Object.assign(_data.subarray(b, b + 4), data.subarray(a, a + 4));
         }
-        if(isIgnoredAlpha()) {
-            for(let i = 0; i < _data.length; i += 4) _data[i + 3] = 255;
-        }
-        if(outline === 2 || outline === 3) return _data;
+        if(isIgnoredAlpha()) for(let i = 0; i < _data.length; i += 4) _data[i + 3] = 255;
+        const outline = selectOutline();
+        if(outline === 2) return _data;
         // 左上
         /*{
             for(const y of Array(_k).keys()) {
@@ -262,13 +259,9 @@
         }
         return _data;
     };
-    const spatialFilter = async ({
-        dataOutlined, dataLuminance,
-        width, height, k, outline,
-        list
-    }) => {
+    const spatialFilter = async ({dataLuminance, width, height, k, data, list}) => {
         const {_k, __k, _width, _height} = calcAny({k, width, height});
-        const _data = dataOutlined.slice(),
+        const _data = data.slice(),
               toI = (x, y) => x + y * _width,
               len = width * height,
               indexs = list.slice(), // 注目する画素及びその近傍の座標
@@ -305,7 +298,7 @@
                 ) << 2;
             }
             sum.fill(0); // 0で初期化
-            func({data: dataOutlined, list, indexs, sum});
+            func({data, list, indexs, sum});
             const _i = toI(x, y) << 2;
             Object.assign(_data.subarray(_i, _i + 4), sum);
         }
