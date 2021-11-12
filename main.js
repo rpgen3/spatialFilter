@@ -111,7 +111,7 @@
         }
     };
     const inputKernelSize = rpgen3.addInputNum(kernel.configCommon, {
-        label: 'カーネルサイズ[n x n]',
+        label: 'カーネルサイズ[n×n]',
         save: true,
         value: 3,
         min: 3,
@@ -175,7 +175,8 @@
             this.config = $('<div>').appendTo(foot);
             this.html = $('<div>').appendTo(foot);
         }
-        show({data, width, height, _width, _height}){
+        show({data, width, height, k}){
+            const {_k, __k, _width, _height} = calcAny({k, width, height});
             const [cv, ctx] = makeCanvas(width, height);
             ctx.putImageData(new ImageData(data, _width, _height), 0, 0);
             this.html.add(this.config).empty();
@@ -203,22 +204,26 @@
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        const {data} = ctx.getImageData(0, 0, width, height),
-              _k = k >> 1,
-              __k = _k << 1,
-              _width = width + __k,
-              _height = height + __k;
+        const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
+            data: ctx.getImageData(0, 0, width, height).data, width, height, k, outline
+        }),
+              dataLuminance = await makeDataLuminance(dataOutlined); // 輝度値を計算した配列
         const result = await spatialFilter({
-            width, height, k, _k, __k, _width, _height, outline,
-            isKernelSum1: isKernelSum1(),
-            isNonLinear: isNonLinear(),
-            selectNonLinear: selectNonLinear(),
-            data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
+            dataOutlined, dataLuminance,
+            width, height, k, outline,
             list: list.slice()
         });
-        output.show({data: result, width, height, _width, _height});
+        output.show({data: result, width, height, k});
     };
-    const makeBigImg = async ({width, height, k, _k, __k, _width, _height, outline, data}) => {
+    const calcAny = ({k, width, height}) => { // 地味に必要な計算
+        const _k = k >> 1, // 端の幅
+              __k = _k << 1, // 両端の幅
+              _width = width + __k, // 外周を埋めた幅
+              _height = height + __k; // 外周を埋めた高さ
+        return {_k, __k, _width, _height};
+    };
+    const makeDataOutlined = async ({data, width, height, k, outline}) => {
+        const {_k, __k, _width, _height} = calcAny({k, width, height});
         const _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
             const x = i % width,
@@ -238,24 +243,50 @@
             }
         }*/
     };
+    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
+    const makeDataLuminance = async data => {
+        const _data = new Uint8ClampedArray(data.length >> 2);
+        for(const i of _data.keys()) {
+            const _i = i << 2;
+            _data[i] = luminance(...data.subarray(_i, _i + 4));
+        }
+        return _data;
+    };
     const spatialFilter = async ({
-        width, height, k, _k, __k, _width, _height, outline, data, list,
-        isKernelSum1,
-        isNonLinear,
-        selectNonLinear
+        dataOutlined, dataLuminance,
+        width, height, k, outline,
+        list
     }) => {
-        const divide = isKernelSum1 ? list.reduce((p, x) => p + x) : 1,
-              _data = data.slice(),
+        const {_k, __k, _width, _height} = calcAny({k, width, height});
+        const _data = dataOutlined.slice(),
               toI = (x, y) => x + y * _width,
               len = width * height,
-              indexs = [...list.keys()];
+              indexs = list.slice(), // 注目する画素及びその近傍の座標
+              sum = [...Array(4).fill(0)]; // 積和の計算結果を格納するためのRGBA配列
+        const func = (() => {
+            if(isNonLinear()) {
+                const func = (() => {
+                    switch(selectNonLinear()) {
+                        case 0: return a => rpgen3.median(a);
+                        case 1: return a => Math.min(...a);
+                        case 2: return a => Math.max(...a);
+                        case 3: return a => rpgen3.mode(a);
+                    }
+                })();
+                const lums = list.slice(); // 輝度値を格納する配列
+                return ({...arg}) => processNonLinear({...arg, func, lums, dataLuminance});
+            }
+            else {
+                const divide = isKernelSum1() ? list.reduce((p, x) => p + x) : 1;
+                return ({...arg}) => processLinear({...arg, divide});
+            }
+        })();
         let cnt = 0;
-        for(const i of Array(len).keys()) {
+        for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
             if(!(++cnt % 1000)) await msg.print(`${i}/${len}`);
             const x = (i % width) + _k,
-                  y = (i / width | 0) + _k,
-                  sum = [...new Array(4).fill(0)];
-            for(const i of list.keys()) {
+                  y = (i / width | 0) + _k;
+            for(const i of list.keys()) { // 座標ゲットだぜ！
                 const _x = i % k,
                       _y = i / k | 0;
                 indexs[i] = toI(
@@ -263,15 +294,14 @@
                     y + _y - _k
                 ) << 2;
             }
-            if(isNonLinear) processNonLinear({indexs, data, list, sum, selectNonLinear});
-            else processLinear({indexs, data, list, sum, divide});
+            sum.fill(0); // 0で初期化
+            func({data: dataOutlined, list, indexs, sum});
             const _i = toI(x, y) << 2;
             Object.assign(_data.subarray(_i, _i + 4), sum);
         }
         return _data;
     };
-    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
-    const processLinear = ({indexs, data, list, sum, divide}) => {
+    const processLinear = ({data, list, indexs, sum, divide}) => {
         for(const [i, v] of indexs.entries()) {
             const rgba = data.subarray(v, v + 4),
                   k = list[i];
@@ -279,22 +309,14 @@
         }
         for(const i of sum.keys()) sum[i] /= divide;
     };
-    const processNonLinear = ({indexs, data, list, sum, selectNonLinear}) => {
+    const processNonLinear = ({data, list, indexs, sum, func, lums, dataLuminance}) => {
         const m = new Map;
         for(const [i, v] of indexs.entries()) {
-            const rgba = data.subarray(v, v + 4),
-                  lum = luminance(...rgba);
+            const lum = dataLuminance[v >> 2];
             m.set(lum, v);
-            sum[i] = lum;
+            lums[i] = lum;
         }
-        const i = m.get((()=>{
-            switch(selectNonLinear) {
-                case 0: return rpgen3.median(sum);
-                case 1: return Math.min(...sum);
-                case 2: return Math.max(...sum);
-                case 3: return rpgen3.mode(sum);
-            }
-        })());
+        const i = m.get(func(lums));
         Object.assign(sum, data.subarray(i, i + 4));
     };
 })();
