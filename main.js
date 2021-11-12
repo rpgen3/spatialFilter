@@ -127,10 +127,12 @@
         value: true
     });
     const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
-        label: '非線形フィルタを使う'
+        label: '非線形フィルタを使う',
+        save: true
     });
     const selectNonLinear = rpgen3.addSelect(nonLinear.html, {
         label: '非線形フィルタ',
+        save: true,
         list: {
             '中央値フィルタ': 0,
             '最小値フィルタ': 1,
