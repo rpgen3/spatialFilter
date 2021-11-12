@@ -14,7 +14,8 @@
         'input',
         'css',
         'url',
-        'hankaku'
+        'hankaku',
+        'sample'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
     Promise.all([
         'table',
@@ -69,8 +70,36 @@
             if(files.length) image.load(URL.createObjectURL(files[0]));
         });
     }
+    const selectLinearType = rpgen3.addSelect(body, {
+        label: '線形フィルタ',
+        list: {
+            '線形フィルタ': 0,
+            '非線形フィルタ': 1
+        }
+    });
+    const selectNonLinear = rpgen3.addSelect(body, {
+        label: '非線形フィルタ',
+        list: {
+            'ランクフィルタ': 0,
+            '中央値フィルタ': 1,
+            '最頻値フィルタ': 2
+        }
+    });
+    selectLinearType.elm.on('change', () => {
+        switch(selectLinearType()){
+            case 0:
+                kernel.html.show();
+                kernel.config.show();
+                break;
+            case 1:
+                kernel.html.hide();
+                kernel.config.hide();
+                break;
+        }
+    });
     const kernel = new class {
         constructor(){
+            this.configCommon = $('<div>').appendTo(body);
             this.config = $('<div>').appendTo(body);
             this.html = $('<table>').appendTo(body);
             this.k = 0;
@@ -102,17 +131,17 @@
             this.list = list;
         }
     };
-    const inputKernelSize = rpgen3.addInputNum(kernel.config, {
+    const inputKernelSize = rpgen3.addInputNum(kernel.configCommon, {
         label: 'カーネルサイズ[n x n]',
         save: true,
         value: 3,
         min: 3,
-        max: 9,
+        max: 23,
         step: 2
     });
-    inputKernelSize.elm.on('change', () => {
+    inputKernelSize.elm.on('input', () => {
         kernel.resize(inputKernelSize());
-    }).trigger('change');
+    }).trigger('input');
     const isKernelSum1 = rpgen3.addInputBool(kernel.config, {
         label: 'kernelの合計が1になるように総和で割る',
         save: true,
@@ -138,9 +167,36 @@
             await sleep(0);
         }
     };
-    const hOutput = $('<div>').appendTo(foot);
+    const output = new class {
+        constructor(){
+            this.config = $('<div>').appendTo(foot);
+            this.html = $('<div>').appendTo(foot);
+        }
+        show({data, width, height, _width, _height}){
+            const [cv, ctx] = makeCanvas(width, height);
+            ctx.putImageData(new ImageData(data, _width, _height), 0, 0);
+            this.html.add(this.config).empty();
+            cv.appendTo(this.html);
+            this.addBtnDL(cv);
+        }
+        addBtnDL(cv){
+            addBtn(this.config, '保存', () => {
+                $('<a>').attr({
+                    href: cv.get(0).toDataURL(),
+                    download: 'spatialFilter.png'
+                }).get(0).click();
+            });
+        }
+    };
+    const makeCanvas = (width, height) => {
+        const cv = $('<canvas>').prop({width, height}),
+              ctx = cv.get(0).getContext('2d');
+        return [cv, ctx];
+    };
     const start = async () => {
         const isSum1 = isKernelSum1(),
+              linearType = selectLinearType(),
+              nonLinear = selectNonLinear(),
               outline = selectOutline(),
               {k, list} = kernel,
               _list = list.slice(),
@@ -154,11 +210,11 @@
               _width = width + __k,
               _height = height + __k;
         const result = await spatialFilter({
-            width, height, k, _k, __k, _width, _height, outline, isSum1,
+            width, height, k, _k, __k, _width, _height, outline, isSum1, linearType, nonLinear,
             data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
             list: _list
         });
-        output({data: result, width, height, _width, _height, _k});
+        output.show({data: result, width, height, _width, _height});
     };
     const makeBigImg = async ({width, height, k, _k, __k, _width, _height, outline, data}) => {
         const _data = new Uint8ClampedArray(_width * _height << 2);
@@ -180,40 +236,49 @@
             }
         }*/
     };
-    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list, isSum1}) => {
+    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list, isSum1, linearType, nonLinear}) => {
         const divide = isSum1 ? list.reduce((p, x) => p + x) : 1,
               _data = data.slice(),
               toI = (x, y) => x + y * _width,
-              len = width * height;
+              len = width * height,
+              indexs = [...list.keys()];
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`${i}/${len}`);
             const x = (i % width) + _k,
                   y = (i / width | 0) + _k,
                   sum = [...new Array(4).fill(0)];
-            for(const [i, v] of list.entries()) {
+            for(const i of list.keys()) {
                 const _x = i % k,
-                      _y = i / k | 0,
-                      _i = toI(
-                          x + _x - _k,
-                          y + _y - _k
-                      ) << 2,
-                      rgba = data.subarray(_i, _i + 4);
-                for(let i = 0; i < 4; i++) sum[i] += rgba[i] * v;
+                      _y = i / k | 0;
+                indexs[i] = toI(
+                    x + _x - _k,
+                    y + _y - _k
+                ) << 2;
+            }
+            if(linearType === 0) processLinear({indexs, data, list, sum, divide});
+            else {
+                if(nonLinear === 0) processNonLinearRank({indexs, data, list, sum});
+                else if(nonLinear === 1) processNonLinearMedian({indexs, data, list, sum});
+                else if(nonLinear === 2) processNonLinearMode({indexs, data, list, sum});
             }
             const _i = toI(x, y) << 2;
-            Object.assign(_data.subarray(_i, _i + 4), sum.map(v => v / divide));
+            Object.assign(_data.subarray(_i, _i + 4), sum);
         }
         return _data;
     };
-    const output = ({data, width, height, _width, _height, _k}) => {
-        const [cv, ctx] = makeCanvas(width, height);
-        ctx.putImageData(new ImageData(data, _width, _height), -_k, -_k);
-        cv.appendTo(hOutput.empty());
+    const processLinear = ({indexs, data, list, sum, divide}) => {
+        for(const [i, v] of indexs.entries()) {
+            const rgba = data.subarray(v, v + 4),
+                  k = list[i];
+            for(let i = 0; i < 4; i++) sum[i] += rgba[i] * k;
+        }
+        for(const i of sum.keys()) sum[i] /= divide;
     };
-    const makeCanvas = (width, height) => {
-        const cv = $('<canvas>').prop({width, height}),
-              ctx = cv.get(0).getContext('2d');
-        return [cv, ctx];
+    const processNonLinearRank = ({indexs, data, list, sum}) => {
+    };
+    const processNonLinearMedian = ({indexs, data, list, sum}) => {
+    };
+    const processNonLinearMode = ({indexs, data, list, sum}) => {
     };
 })();
