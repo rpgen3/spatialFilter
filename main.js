@@ -70,14 +70,23 @@
             if(files.length) image.load(URL.createObjectURL(files[0]));
         });
     }
-    const selectLinearType = rpgen3.addSelect(body, {
+    const nonLinear = new class {
+        constructor(){
+            this.config = $('<div>').appendTo(body);
+            this.html = $('<div>').appendTo(body);
+        }
+        init(){
+            selectLinearType.elm.trigger('change');
+        }
+    };
+    const selectLinearType = rpgen3.addSelect(nonLinear.config, {
         label: '線形フィルタ',
         list: {
             '線形フィルタ': 0,
             '非線形フィルタ': 1
         }
     });
-    const selectNonLinear = rpgen3.addSelect(body, {
+    const selectNonLinear = rpgen3.addSelect(nonLinear.html, {
         label: '非線形フィルタ',
         list: {
             'ランクフィルタ': 0,
@@ -90,10 +99,12 @@
             case 0:
                 kernel.html.show();
                 kernel.config.show();
+                nonLinear.html.hide();
                 break;
             case 1:
                 kernel.html.hide();
                 kernel.config.hide();
+                nonLinear.html.show();
                 break;
         }
     });
@@ -147,6 +158,7 @@
         save: true,
         value: true
     });
+    nonLinear.init();
     const selectOutline = rpgen3.addSelect(body, {
         label: '外周画像の処理',
         save: true,
@@ -267,6 +279,7 @@
         }
         return _data;
     };
+    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
     const processLinear = ({indexs, data, list, sum, divide}) => {
         for(const [i, v] of indexs.entries()) {
             const rgba = data.subarray(v, v + 4),
@@ -278,6 +291,15 @@
     const processNonLinearRank = ({indexs, data, list, sum}) => {
     };
     const processNonLinearMedian = ({indexs, data, list, sum}) => {
+        const m = new Map;
+        for(const [i, v] of indexs.entries()) {
+            const rgba = data.subarray(v, v + 4),
+                  lum = luminance(...rgba);
+            m.set(lum, v);
+            sum[i] = lum;
+        }
+        const i = m.get(rpgen3.median(sum));
+        Object.assign(sum, data.subarray(i, i + 4));
     };
     const processNonLinearMode = ({indexs, data, list, sum}) => {
     };
