@@ -160,6 +160,11 @@
             'カーネルの形を変える': 3
         }
     });
+    const isIgnoredAlpha = rpgen3.addInputBool(body, {
+        label: '不透明度をすべて無視',
+        save: true,
+        value: true
+    });
     addBtn(body, '処理開始', () => start());
     const msg = new class {
         constructor(){
@@ -178,7 +183,7 @@
         show({data, width, height, k}){
             const {_k, __k, _width, _height} = calcAny({k, width, height});
             const [cv, ctx] = makeCanvas(width, height);
-            ctx.putImageData(new ImageData(data, _width, _height), 0, 0);
+            ctx.putImageData(new ImageData(data, _width, _height), -_k, -_k);
             this.html.add(this.config).empty();
             cv.appendTo(this.html);
             this.addBtnDL(cv);
@@ -223,14 +228,17 @@
         return {_k, __k, _width, _height};
     };
     const makeDataOutlined = async ({data, width, height, k, outline}) => {
-        const {_k, __k, _width, _height} = calcAny({k, width, height});
-        const _data = new Uint8ClampedArray(_width * _height << 2);
+        const {_k, __k, _width, _height} = calcAny({k, width, height}),
+              _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
             const x = i % width,
                   y = i / width | 0,
-                  _i = x + y * _width << 2,
-                  __i = i << 2;
-            Object.assign(_data.subarray(_i, _i + 4), data.subarray(__i, __i + 4));
+                  a = i << 2,
+                  b = (x + _k) + (y + _k) * _width << 2;
+            Object.assign(_data.subarray(b, b + 4), data.subarray(a, a + 4));
+        }
+        if(isIgnoredAlpha()) {
+            for(let i = 0; i < _data.length; i += 4) _data[i + 3] = 255;
         }
         if(outline === 2 || outline === 3) return _data;
         // 左上
