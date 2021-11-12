@@ -156,8 +156,8 @@
         label: '外周画像の処理',
         save: true,
         list: {
-            '外周部分の画素値をコピー': 0,
-            '外周部分を中心にして対称の位置をコピー': 1,
+            '外周部分の画素値をコピー': 1,
+            '外周部分を中心にして対称の位置をコピー': 0,
             '全部黒': 2
         }
     });
@@ -211,8 +211,8 @@
         ctx.drawImage(img, 0, 0);
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data, width, height, k
-        }),
-              dataLuminance = await makeDataLuminance(dataOutlined); // 輝度値を計算した配列
+        });
+        const dataLuminance = await makeDataLuminance(dataOutlined); // 輝度値を計算した配列
         const result = await spatialFilter({
             dataLuminance, width, height, k,
             data: dataOutlined,
@@ -240,15 +240,63 @@
         if(isIgnoredAlpha()) for(let i = 0; i < _data.length; i += 4) _data[i + 3] = 255;
         const outline = selectOutline();
         if(outline === 2) return _data;
-        // 左上
-        /*{
-            for(const y of Array(_k).keys()) {
-                for(const x of Array(_k).keys()) {
-                    y - _k
-                    x - _k
+        const toI = (x, y) => x + y * _width;
+        const toXY = i => {
+            const x = i % _k,
+                  y = i / _k | 0;
+            return [x, y];
+        };
+        const put = (a, b) => {
+            const _a = a << 2,
+                  _b = b << 2;
+            Object.assign(_data.subarray(_a, _a + 4), _data.subarray(_b, _b + 4));
+        };
+        { // 四隅
+            const w = _k + width,
+                  h = _k + height;
+            for(const [[ax, ay], [bx, by]] of [ // 外周の起点座標, 内周の四隅
+                [[0, 0], [_k, _k]], // 左上
+                [[w, 0], [-1, _k]], // 右上
+                [[0, h], [_k, -1]], // 左下
+                [[w, h], [-1, -1]] // 右下
+            ]) {
+                const len = _k ** 2;
+                for(const i of Array(len).keys()) {
+                    const [x, y] = toXY(i);
+                    const _i = outline ? toI(ax + bx, ay + by) : (() => {
+                        const [cx, cy] = [bx, by].map(v => v - _k + 1), // 外周の対称の起点
+                              [x, y] = toXY(len - i - 1);
+                        return toI(x + ax + bx + cx, y + ay + by + cy);
+                    })();
+                    put(toI(x + ax, y + ay), _i);
                 }
             }
-        }*/
+        }
+        { // 上下
+            const kh = _k + height - 1;
+            for(const x of Array(width).keys()) {
+                const kx = _k + x;
+                for(const a of Array(_k).keys()) {
+                    const a1 = a + 1,
+                          o = outline ? 0 : a1;
+                    put(toI(kx, _k - a1), toI(kx, _k + o));
+                    put(toI(kx, kh + a1), toI(kx, kh - o));
+                }
+            }
+        }
+        { // 左右
+            const kw = _k + width - 1;
+            for(const y of Array(height).keys()) {
+                const ky = _k + y;
+                for(const a of Array(_k).keys()) {
+                    const a1 = a + 1,
+                          o = outline ? 0 : a1;
+                    put(toI(_k - a1, ky), toI(_k + o, ky));
+                    put(toI(kw + a1, ky), toI(kw - o, ky));
+                }
+            }
+        }
+        return _data;
     };
     const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
     const makeDataLuminance = async data => {
