@@ -75,39 +75,7 @@
             this.config = $('<div>').appendTo(body);
             this.html = $('<div>').appendTo(body);
         }
-        init(){
-            selectLinearType.elm.trigger('change');
-        }
     };
-    const selectLinearType = rpgen3.addSelect(nonLinear.config, {
-        label: '線形フィルタ',
-        list: {
-            '線形フィルタ': 0,
-            '非線形フィルタ': 1
-        }
-    });
-    const selectNonLinear = rpgen3.addSelect(nonLinear.html, {
-        label: '非線形フィルタ',
-        list: {
-            'ランクフィルタ': 0,
-            '中央値フィルタ': 1,
-            '最頻値フィルタ': 2
-        }
-    });
-    selectLinearType.elm.on('change', () => {
-        switch(selectLinearType()){
-            case 0:
-                kernel.html.show();
-                kernel.config.show();
-                nonLinear.html.hide();
-                break;
-            case 1:
-                kernel.html.hide();
-                kernel.config.hide();
-                nonLinear.html.show();
-                break;
-        }
-    });
     const kernel = new class {
         constructor(){
             this.configCommon = $('<div>').appendTo(body);
@@ -158,7 +126,30 @@
         save: true,
         value: true
     });
-    nonLinear.init();
+    const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
+        label: '非線形フィルタを使う'
+    });
+    const selectNonLinear = rpgen3.addSelect(nonLinear.html, {
+        label: '非線形フィルタ',
+        list: {
+            '中央値フィルタ': 0,
+            '最小値フィルタ': 1,
+            '最大値フィルタ': 2,
+            '最頻値フィルタ': 3
+        }
+    });
+    isNonLinear.elm.on('change', () => {
+        if(isNonLinear()) {
+            kernel.html.hide();
+            kernel.config.hide();
+            nonLinear.html.show();
+        }
+        else {
+            kernel.html.show();
+            kernel.config.show();
+            nonLinear.html.hide();
+        }
+    }).trigger('change');
     const selectOutline = rpgen3.addSelect(body, {
         label: '外周画像の処理',
         save: true,
@@ -206,12 +197,8 @@
         return [cv, ctx];
     };
     const start = async () => {
-        const isSum1 = isKernelSum1(),
-              linearType = selectLinearType(),
-              nonLinear = selectNonLinear(),
-              outline = selectOutline(),
+        const outline = selectOutline(),
               {k, list} = kernel,
-              _list = list.slice(),
               {img} = image,
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
@@ -222,9 +209,12 @@
               _width = width + __k,
               _height = height + __k;
         const result = await spatialFilter({
-            width, height, k, _k, __k, _width, _height, outline, isSum1, linearType, nonLinear,
+            width, height, k, _k, __k, _width, _height, outline,
+            isKernelSum1: isKernelSum1(),
+            isNonLinear: isNonLinear(),
+            selectNonLinear: selectNonLinear(),
             data: await makeBigImg({width, height, k, _k, __k, _width, _height, outline, data}),
-            list: _list
+            list: list.slice()
         });
         output.show({data: result, width, height, _width, _height});
     };
@@ -248,8 +238,13 @@
             }
         }*/
     };
-    const spatialFilter = async ({width, height, k, _k, __k, _width, _height, outline, data, list, isSum1, linearType, nonLinear}) => {
-        const divide = isSum1 ? list.reduce((p, x) => p + x) : 1,
+    const spatialFilter = async ({
+        width, height, k, _k, __k, _width, _height, outline, data, list,
+        isKernelSum1,
+        isNonLinear,
+        selectNonLinear
+    }) => {
+        const divide = isKernelSum1 ? list.reduce((p, x) => p + x) : 1,
               _data = data.slice(),
               toI = (x, y) => x + y * _width,
               len = width * height,
@@ -268,12 +263,8 @@
                     y + _y - _k
                 ) << 2;
             }
-            if(linearType === 0) processLinear({indexs, data, list, sum, divide});
-            else {
-                if(nonLinear === 0) processNonLinearRank({indexs, data, list, sum});
-                else if(nonLinear === 1) processNonLinearMedian({indexs, data, list, sum});
-                else if(nonLinear === 2) processNonLinearMode({indexs, data, list, sum});
-            }
+            if(isNonLinear) processNonLinear({indexs, data, list, sum, selectNonLinear});
+            else processLinear({indexs, data, list, sum, divide});
             const _i = toI(x, y) << 2;
             Object.assign(_data.subarray(_i, _i + 4), sum);
         }
@@ -288,9 +279,7 @@
         }
         for(const i of sum.keys()) sum[i] /= divide;
     };
-    const processNonLinearRank = ({indexs, data, list, sum}) => {
-    };
-    const processNonLinearMedian = ({indexs, data, list, sum}) => {
+    const processNonLinear = ({indexs, data, list, sum, selectNonLinear}) => {
         const m = new Map;
         for(const [i, v] of indexs.entries()) {
             const rgba = data.subarray(v, v + 4),
@@ -298,9 +287,14 @@
             m.set(lum, v);
             sum[i] = lum;
         }
-        const i = m.get(rpgen3.median(sum));
+        const i = m.get((()=>{
+            switch(selectNonLinear) {
+                case 0: return rpgen3.median(sum);
+                case 1: return Math.min(...sum);
+                case 2: return Math.max(...sum);
+                case 3: return rpgen3.mode(sum);
+            }
+        })());
         Object.assign(sum, data.subarray(i, i + 4));
-    };
-    const processNonLinearMode = ({indexs, data, list, sum}) => {
     };
 })();
