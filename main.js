@@ -19,7 +19,8 @@
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
     Promise.all([
         'table',
-        'kernel'
+        'kernel',
+        'tab'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     const addBtn = (h, ttl, func) => $('<button>').appendTo(h).text(ttl).on('click', func);
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -78,7 +79,6 @@
     };
     const kernel = new class {
         constructor(){
-            this.configCommon = $('<div>').appendTo(body);
             this.config = $('<div>').appendTo(body);
             this.html = $('<table>').appendTo(body);
             this.k = 0;
@@ -110,7 +110,7 @@
             this.list = list;
         }
     };
-    const inputKernelSize = rpgen3.addInputNum(kernel.configCommon, {
+    const inputKernelSize = rpgen3.addInputNum(kernel.config, {
         label: 'カーネルサイズ[n×n]',
         save: true,
         value: 3,
@@ -121,11 +121,6 @@
     inputKernelSize.elm.on('input', () => {
         kernel.resize(inputKernelSize());
     }).trigger('input');
-    const isKernelSum1 = rpgen3.addInputBool(kernel.config, {
-        label: 'kernelの合計が1になるように総和で割る',
-        save: true,
-        value: true
-    });
     const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
         label: '非線形フィルタを使う',
         save: true
@@ -143,12 +138,10 @@
     isNonLinear.elm.on('change', () => {
         if(isNonLinear()) {
             kernel.html.hide();
-            kernel.config.hide();
             nonLinear.html.show();
         }
         else {
             kernel.html.show();
-            kernel.config.show();
             nonLinear.html.hide();
         }
     }).trigger('change');
@@ -232,6 +225,11 @@
         await msg.print('外周を補完した画像を作成します。');
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data, width, height, k
+        });
+        output.add({
+            label: '入力',
+            data: dataOutlined,
+            width, height, k
         });
         await msg.print('輝度を取得します。');
         const dataLuminance = await makeDataLuminance(dataOutlined); // 輝度を計算した配列
@@ -361,10 +359,7 @@
                 const lums = list.slice(); // 輝度値を格納する配列
                 return ({...arg}) => processNonLinear({...arg, func, lums, dataLuminance});
             }
-            else {
-                const divide = isKernelSum1() ? list.reduce((p, x) => p + x) : 1;
-                return ({...arg}) => processLinear({...arg, divide});
-            }
+            else return ({...arg}) => processLinear({...arg});
         })();
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
@@ -386,13 +381,12 @@
         }
         return _data;
     };
-    const processLinear = ({data, list, indexs, sum, divide}) => {
+    const processLinear = ({data, list, indexs, sum}) => {
         for(const [i, v] of indexs.entries()) {
             const rgba = data.subarray(v, v + 4),
                   k = list[i];
             for(let i = 0; i < 4; i++) sum[i] += rgba[i] * k;
         }
-        for(const i of sum.keys()) sum[i] /= divide;
     };
     const processNonLinear = ({data, list, indexs, sum, func, lums, dataLuminance}) => {
         const m = new Map;
