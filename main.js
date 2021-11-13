@@ -206,8 +206,9 @@
         }
         toOpacity(data){
             if(!this.isOpacity) return data;
-            for(let i = 3; i < data.length; i += 4) data[i] = 255;
-            return data;
+            const _data = data.slice();
+            for(let i = 3; i < data.length; i += 4) _data[i] = 255;
+            return _data;
         }
     };
     const makeCanvas = (width, height) => {
@@ -222,9 +223,10 @@
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        await msg.print('外周を補完した画像を作成します。');
+        await msg.print('外周を補完します。');
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
-            data: ctx.getImageData(0, 0, width, height).data, width, height, k
+            data: ctx.getImageData(0, 0, width, height).data,
+            width, height, k
         });
         output.add({
             label: '入力',
@@ -232,7 +234,11 @@
             width, height, k
         });
         await msg.print('輝度を取得します。');
-        const dataLuminance = await makeDataLuminance(dataOutlined); // 輝度を計算した配列
+        const calcLuminance = isIgnoredAlpha() ? luminance : luminanceAlpha;
+        const dataLuminance = await makeDataLuminance({ // 輝度を計算した配列
+            data: dataOutlined,
+            calcLuminance
+        });
         const result = await spatialFilter({
             dataLuminance, width, height, k,
             data: dataOutlined,
@@ -245,10 +251,21 @@
             width, height, k
         });
         output.showTab('出力');
-        await msg.print('出力をネガポジ反転した画像を作成します。');
+        await msg.print('出力を反転します。');
+        const dataReversed = await makeDataReversed(result);
         output.add({
             label: '反転',
-            data: await makeDataReversed(result),
+            data: dataReversed,
+            width, height, k
+        });
+        await msg.print('反転を2値化します。');
+        const dataBinarized = await makeDattaBinarized({
+            data: dataReversed,
+            calcLuminance
+        });
+        output.add({
+            label: '2値化',
+            data: dataBinarized,
             width, height, k
         });
         await msg.print('全ての処理が完了しました。');
@@ -331,11 +348,15 @@
         return _data;
     };
     const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
-    const makeDataLuminance = async data => {
+    const luminanceAlpha = (r, g, b, a) => {
+        const rate = a / 255;
+        return luminance(...[r, g, b].map(v => v * rate));
+    };
+    const makeDataLuminance = async ({data, calcLuminance}) => {
         const _data = new Uint8ClampedArray(data.length >> 2);
         for(const i of _data.keys()) {
             const _i = i << 2;
-            _data[i] = luminance(...data.subarray(_i, _i + 4));
+            _data[i] = calcLuminance(...data.subarray(_i, _i + 4));
         }
         return _data;
     };
@@ -399,10 +420,22 @@
         Object.assign(sum, data.subarray(i, i + 4));
     };
     const makeDataReversed = async data => {
-        const _data = new Uint8ClampedArray(data.length);
+        const _data = data.slice();
         for(const i of Array(data.length >> 2).keys()) {
             const _i = i << 2;
-            Object.assign(_data.subarray(_i, _i + 4), data.subarray(_i, _i + 4).map(v => 255 - v));
+            Object.assign(_data.subarray(_i, _i + 3), data.subarray(_i, _i + 3).map(v => 255 - v));
+        }
+        return _data;
+    };
+    const makeDattaBinarized = async ({data, calcLuminance}) => {
+        const _data = data.slice(),
+              b = calcLuminance === luminanceAlpha;
+        for(const i of Array(data.length >> 2).keys()) {
+            const _i = i << 2,
+                  lum = calcLuminance(...data.subarray(_i, _i + 4)),
+                  bin = lum & 0x80 ? 255 : 0;
+            _data[_i] = _data[_i + 1] = _data[_i + 2] = bin;
+            if(b) _data[_i + 3] = bin;
         }
         return _data;
     };
