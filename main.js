@@ -79,10 +79,12 @@
     };
     const kernel = new class {
         constructor(){
+            this.select = $('<div>').appendTo(body);
             this.config = $('<div>').appendTo(body);
             this.html = $('<table>').appendTo(body);
             this.k = 0;
             this.list = [];
+            this.tdMap = new Map;
         }
         toI(x, y){
             return x + y * this.k;
@@ -91,23 +93,33 @@
             const _k = k - this.k >> 1,
                   list = [];
             this.html.empty();
+            this.tdMap.clear();
             for(const y of Array(k).keys()) {
                 const tr = $('<tr>').appendTo(this.html);
                 for(const x of Array(k).keys()) {
                     const [_x, _y] = [x, y].map(v => v - _k),
                           n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[this.toI(_x, _y)] || 0;
                     list.push(n);
+                    const i = this.toI(x, y);
                     const td = $('<td>').appendTo(tr).prop({
                         contenteditable: true
                     }).text(n).on('focusout', () => {
-                        const n = Number(rpgen3.toHan(td.text())) || 0;
-                        this.list[this.toI(x, y)] = n;
-                        td.text(n);
+                        this.input(i, rpgen3.toHan(td.text()));
                     }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
+                    this.tdMap.set(i, td);
                 }
             }
             this.k = k;
             this.list = list;
+        }
+        input(i, value){
+            try {
+                const n = Number(new Function(`return ${value}`)());
+                if(!Number.isNaN(n)) this.list[i] = n;
+            }
+            catch {}
+            this.tdMap.get(i).text(this.list[i]);
+            return true;
         }
     };
     const inputKernelSize = rpgen3.addInputNum(kernel.config, {
@@ -118,9 +130,65 @@
         max: 23,
         step: 2
     });
-    inputKernelSize.elm.on('input', () => {
+    inputKernelSize.elm.on('change', () => {
         kernel.resize(inputKernelSize());
-    }).trigger('input');
+    }).trigger('change');
+    const selectLinear = rpgen3.addSelect(kernel.select, {
+        label: '線形フィルタ',
+        save: true,
+        list: {
+            '平均値フィルタ(3x3)': Array(9).fill('1/9'),
+            '平均値フィルタ(5x5)': Array(25).fill('1/25'),
+            'ガウシアンフィルタ': [
+                1, 2, 1,
+                2, 4, 2,
+                1, 2, 1
+            ].map(v => `${v}/16`),
+            'Robertsフィルタ(x方向)': [
+                0, 0, 0,
+                0, 1, 0,
+                0, 0, -1
+            ],
+            'Prewittフィルタ(x方向)': [
+                -1, 0, 1,
+                -1, 0, 1,
+                -1, 0, 1
+            ],
+            'Sobelフィルタ(x方向)': [
+                -1, 0, 1,
+                -2, 0, 2,
+                -1, 0, 1
+            ],
+            'ラプラシアンフィルタ(4近傍)': [
+                0, 1, 0,
+                1, -4, 1,
+                0, 1, 0
+            ],
+            'ラプラシアンフィルタ(8近傍)': [
+                1, 1, 1,
+                1, -8, 1,
+                1, 1, 1
+            ],
+            '鮮鋭化フィルタ': [
+                0, -1, 0,
+                -1, 5, -1,
+                0, -1, 0
+            ],
+            'LoGフィルタ': [
+                0, 0, 1, 0, 0,
+                0, 1, 2, 1, 0,
+                1, 2, -16, 2, 1,
+                0, 1, 2, 1, 0,
+                0, 0, 1, 0, 0
+            ]
+        }
+    });
+    selectLinear.elm.on('change', () => {
+        const k = selectLinear();
+        inputKernelSize(k.length);
+        inputKernelSize.trigger('change');
+        for(const [i, v] of k.entries()) kernel.input(i, v);
+    }).trigger('change');
     const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
         label: '非線形フィルタを使う',
         save: true
@@ -137,11 +205,11 @@
     });
     isNonLinear.elm.on('change', () => {
         if(isNonLinear()) {
-            kernel.html.hide();
+            kernel.html.add(kernel.select).hide();
             nonLinear.html.show();
         }
         else {
-            kernel.html.show();
+            kernel.html.add(kernel.select).show();
             nonLinear.html.hide();
         }
     }).trigger('change');
