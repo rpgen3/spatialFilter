@@ -178,24 +178,43 @@
     };
     const output = new class {
         constructor(){
-            this.config = $('<div>').appendTo(foot);
+            this.tab = $('<div>').appendTo(foot);
             this.html = $('<div>').appendTo(foot);
+            this.list = new Map;
+            this.isOpacity = false;
         }
-        show({data, width, height, k}){
-            const {_k, __k, _width, _height} = calcAny({k, width, height});
-            const [cv, ctx] = makeCanvas(width, height);
-            ctx.putImageData(new ImageData(data, _width, _height), -_k, -_k);
-            this.html.add(this.config).empty();
-            cv.appendTo(this.html);
-            this.addBtnDL(cv);
+        init(){
+            this.tab.add(this.html).empty();
+            this.list.clear();
+            this.isOpacity = isIgnoredAlpha();
         }
-        addBtnDL(cv){
-            addBtn(this.config, '保存', () => {
-                $('<a>').attr({
-                    href: cv.get(0).toDataURL(),
-                    download: 'spatialFilter.png'
-                }).get(0).click();
-            });
+        add({label, data, width, height, k}){
+            const {_k, __k, _width, _height} = calcAny({k, width, height}),
+                  [cv, ctx] = makeCanvas(width, height);
+            ctx.putImageData(new ImageData(this.toOpacity(data), _width, _height), -_k, -_k);
+            const html = $('<div>').appendTo(this.html).hide().append(cv);
+            this.makeBtnDL(label, cv.get(0).toDataURL()).appendTo(html);
+            const tab = addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
+            this.list.set(label, [tab, html]);
+        }
+        showTab(label){
+            this.tab.children().removeClass('tab-selected');
+            this.html.children().hide();
+            const [tab, html] = this.list.get(label);
+            tab.addClass('tab-selected');
+            html.show();
+        }
+        makeBtnDL(label, href){
+            return $('<div>').append(
+                $('<button>').text('保存').on('click', () => {
+                    $('<a>').attr({href, download: `${label}.png`}).get(0).click();
+                })
+            );
+        }
+        toOpacity(data){
+            if(!this.isOpacity) return data;
+            for(let i = 3; i < data.length; i += 4) data[i] = 255;
+            return data;
         }
     };
     const makeCanvas = (width, height) => {
@@ -204,21 +223,37 @@
         return [cv, ctx];
     };
     const start = async () => {
+        output.init();
         const {k, list} = kernel,
               {img} = image,
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
+        await msg.print('外周を補完した画像を作成します。');
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data, width, height, k
         });
-        const dataLuminance = await makeDataLuminance(dataOutlined); // 輝度値を計算した配列
+        await msg.print('輝度を取得します。');
+        const dataLuminance = await makeDataLuminance(dataOutlined); // 輝度を計算した配列
         const result = await spatialFilter({
             dataLuminance, width, height, k,
             data: dataOutlined,
             list: list.slice()
         });
-        output.show({data: result, width, height, k});
+        await msg.print('空間フィルタリング完了');
+        output.add({
+            label: '出力',
+            data: result,
+            width, height, k
+        });
+        output.showTab('出力');
+        await msg.print('出力をネガポジ反転した画像を作成します。');
+        output.add({
+            label: '反転',
+            data: await makeDataReversed(result),
+            width, height, k
+        });
+        await msg.print('全ての処理が完了しました。');
     };
     const calcAny = ({k, width, height}) => { // 地味に必要な計算
         const _k = k >> 1, // 端の幅
@@ -237,7 +272,6 @@
                   b = (x + _k) + (y + _k) * _width << 2;
             Object.assign(_data.subarray(b, b + 4), data.subarray(a, a + 4));
         }
-        if(isIgnoredAlpha()) for(let i = 0; i < _data.length; i += 4) _data[i + 3] = 255;
         const outline = selectOutline();
         if(outline === 2) return _data;
         const toI = (x, y) => x + y * _width;
@@ -334,7 +368,7 @@
         })();
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
-            if(!(++cnt % 1000)) await msg.print(`${i}/${len}`);
+            if(!(++cnt % 1000)) await msg.print(`空間フィルタリング(${i}/${len})`);
             const x = (i % width) + _k,
                   y = (i / width | 0) + _k;
             for(const i of list.keys()) { // 座標ゲットだぜ！
@@ -369,5 +403,13 @@
         }
         const i = m.get(func(lums));
         Object.assign(sum, data.subarray(i, i + 4));
+    };
+    const makeDataReversed = async data => {
+        const _data = new Uint8ClampedArray(data.length);
+        for(const i of Array(data.length >> 2).keys()) {
+            const _i = i << 2;
+            Object.assign(_data.subarray(_i, _i + 4), data.subarray(_i, _i + 4).map(v => 255 - v));
+        }
+        return _data;
     };
 })();
