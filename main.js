@@ -85,41 +85,48 @@
             this.k = 0;
             this.list = [];
             this.tdMap = new Map;
+            this.valueMap = new Map;
         }
-        toI(x, y){
-            return x + y * this.k;
+        toI(x, y, k = this.k){
+            return x + y * k;
         }
         resize(k){
             const _k = k - this.k >> 1,
                   list = [];
             this.html.empty();
             this.tdMap.clear();
+            this.valueMap.clear();
             for(const y of Array(k).keys()) {
                 const tr = $('<tr>').appendTo(this.html);
                 for(const x of Array(k).keys()) {
                     const [_x, _y] = [x, y].map(v => v - _k),
                           n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[this.toI(_x, _y)] || 0;
                     list.push(n);
-                    const i = this.toI(x, y);
+                    const i = this.toI(x, y, k);
                     const td = $('<td>').appendTo(tr).prop({
                         contenteditable: true
                     }).text(n).on('focusout', () => {
                         this.input(i, rpgen3.toHan(td.text()));
                     }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
                     this.tdMap.set(i, td);
+                    this.valueMap.set(i, n);
                 }
             }
             this.k = k;
             this.list = list;
         }
         input(i, value){
+            const td = this.tdMap.get(i);
             try {
                 const n = Number(new Function(`return ${value}`)());
-                if(!Number.isNaN(n)) this.list[i] = n;
+                if(!Number.isNaN(n)) {
+                    this.list[i] = n;
+                    td.text(value);
+                    this.valueMap.set(i, value);
+                }
             }
             catch {}
-            this.tdMap.get(i).text(this.list[i]);
-            return true;
+            td.text(this.valueMap.get(i));
         }
     };
     const inputKernelSize = rpgen3.addInputNum(kernel.config, {
@@ -149,15 +156,30 @@
                 0, 1, 0,
                 0, 0, -1
             ],
+            'Robertsフィルタ(y方向)': [
+                0, 0, 0,
+                0, 0, -1,
+                0, 1, 0
+            ],
             'Prewittフィルタ(x方向)': [
                 -1, 0, 1,
                 -1, 0, 1,
                 -1, 0, 1
             ],
+            'Prewittフィルタ(y方向)': [
+                -1, -1, -1,
+                0, 0, 0,
+                1, 1, 1
+            ],
             'Sobelフィルタ(x方向)': [
                 -1, 0, 1,
                 -2, 0, 2,
                 -1, 0, 1
+            ],
+            'Sobelフィルタ(y方向)': [
+                -1, -2, -1,
+                0, 0, 0,
+                1, 2, 1
             ],
             'ラプラシアンフィルタ(4近傍)': [
                 0, 1, 0,
@@ -185,8 +207,8 @@
     });
     selectLinear.elm.on('change', () => {
         const k = selectLinear();
-        inputKernelSize(k.length);
-        inputKernelSize.trigger('change');
+        inputKernelSize(Math.sqrt(k.length));
+        inputKernelSize.elm.trigger('change');
         for(const [i, v] of k.entries()) kernel.input(i, v);
     }).trigger('change');
     const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
