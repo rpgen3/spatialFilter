@@ -14,4 +14,6 @@ th {
  
 td {
     font-weight:  bold;         /* 文字の太さ指定 */
+    max-width: 3em;
+    min-width: 3em;
 }
