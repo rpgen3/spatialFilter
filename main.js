@@ -41,7 +41,7 @@
             this.img = null;
         }
         async load(url){
-            (this.img = await this._load(url)).appendTo(this.html.empty());
+            $(this.img = await this._load(url)).appendTo(this.html.empty());
         }
     };
     { // 画像入力
