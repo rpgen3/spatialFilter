@@ -82,6 +82,7 @@
             this.select = $('<div>').appendTo(body);
             this.config = $('<div>').appendTo(body);
             this.html = $('<table>').appendTo(body);
+            this.foot = $('<div>').appendTo(body);
             this.k = 0;
             this.list = [];
             this.tdMap = new Map;
@@ -140,6 +141,33 @@
     inputKernelSize.elm.on('change', () => {
         kernel.resize(inputKernelSize());
     }).trigger('change');
+    const toTransposed = arr => { // 正方の転置行列
+        const w = Math.sqrt(arr.length),
+              _arr = arr.slice();
+        for(const [i, v] of arr.entries()) {
+            const x = i % w,
+                  y = i / w | 0;
+            _arr[y + x * w] = v;
+        }
+        return _arr;
+    };
+    const kernelPrewitt = [
+        -1, 0, 1,
+        -1, 0, 1,
+        -1, 0, 1
+    ];
+    const kernelSobel = [
+        -1, 0, 1,
+        -2, 0, 2,
+        -1, 0, 1
+    ];
+    const kernelSobel5 = [
+        -1, -2, 0, 2, 1,
+        -4, -8, 0, 8, 4,
+        -6, -12, 0,12, 6,
+        -4, -8, 0, 8, 4,
+        -1, -2, 0, 2, 1
+    ];
     const selectLinear = rpgen3.addSelect(kernel.select, {
         label: '線形フィルタ',
         save: true,
@@ -175,43 +203,15 @@
             ],
             'Robertsフィルタ(y方向)': [
                 0, 0, 0,
-                0, 0, -1,
-                0, 1, 0
+                0, 0, 1,
+                0, -1, 0
             ],
-            'Prewittフィルタ(x方向)': [
-                -1, 0, 1,
-                -1, 0, 1,
-                -1, 0, 1
-            ],
-            'Prewittフィルタ(y方向)': [
-                -1, -1, -1,
-                0, 0, 0,
-                1, 1, 1
-            ],
-            'Sobelフィルタ(x方向)': [
-                -1, 0, 1,
-                -2, 0, 2,
-                -1, 0, 1
-            ],
-            'Sobelフィルタ(y方向)': [
-                -1, -2, -1,
-                0, 0, 0,
-                1, 2, 1
-            ],
-            'Sobelフィルタ(x方向)(5x5)': [
-                -1, -2, 0, 2, 1,
-                -4, -8, 0, 8, 4,
-                -6, -12, 0,12, 6,
-                -4, -8, 0, 8, 4,
-                -1, -2, 0, 2, 1
-            ],
-            'Sobelフィルタ(y方向)(5x5)': [
-                -1, -4, -6, -4, -1,
-                -2, -8, -12, -8, -2,
-                0, 0, 0, 0, 0,
-                2, 8, 12, 8, 2,
-                1, 4, 6, 4, 1
-            ],
+            'Prewittフィルタ(x方向)': kernelPrewitt,
+            'Prewittフィルタ(y方向)': toTransposed(kernelPrewitt),
+            'Sobelフィルタ(x方向)': kernelSobel,
+            'Sobelフィルタ(y方向)': toTransposed(kernelSobel),
+            'Sobelフィルタ(x方向)(5x5)': kernelSobel5,
+            'Sobelフィルタ(y方向)(5x5)': toTransposed(kernelSobel5),
             'ラプラシアンフィルタ(4近傍)': [
                 0, 1, 0,
                 1, -4, 1,
@@ -256,13 +256,18 @@
             '最頻値フィルタ': 3
         }
     });
+    const isRootSumSquire = rpgen3.addInputBool(kernel.foot, {
+        label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
+        save: true,
+        value: true
+    });
     isNonLinear.elm.on('change', () => {
         if(isNonLinear()) {
-            kernel.html.add(kernel.select).hide();
+            kernel.html.add(kernel.select).add(kernel.foot).hide();
             nonLinear.html.show();
         }
         else {
-            kernel.html.add(kernel.select).show();
+            kernel.html.add(kernel.select).add(kernel.foot).show();
             nonLinear.html.hide();
         }
     }).trigger('change');
@@ -498,7 +503,14 @@
                 const lums = list.slice(); // 輝度値を格納する配列
                 return ({...arg}) => processNonLinear({...arg, func, lums, dataLuminance});
             }
-            else return ({...arg}) => processLinear({...arg});
+            else {
+                if(isRootSumSquire()) {
+                    const _list = toTransposed(list),
+                          _sum = sum.slice();
+                    return ({...arg}) => processLinear2({...arg, _list, _sum});
+                }
+                else return ({...arg}) => processLinear({...arg});
+            }
         })();
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
@@ -526,6 +538,20 @@
                   k = list[i];
             for(let i = 0; i < 4; i++) sum[i] += rgba[i] * k;
         }
+    };
+    const processLinear2 = ({data, list, indexs, sum, _list, _sum}) => {
+        _sum.fill(0);
+        for(const [i, v] of indexs.entries()) {
+            const rgba = data.subarray(v, v + 4),
+                  k = list[i],
+                  _k = _list[i];
+            for(let i = 0; i < 4; i++) {
+                const v = rgba[i];
+                sum[i] += v * k;
+                _sum[i] += v * _k;
+            }
+        }
+        for(let i = 0; i < 4; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
     };
     const processNonLinear = ({data, list, indexs, sum, func, lums, dataLuminance}) => {
         const m = new Map;
