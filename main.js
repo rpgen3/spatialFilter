@@ -258,8 +258,7 @@
     });
     const isRootSumSquire = rpgen3.addInputBool(kernel.foot, {
         label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
-        save: true,
-        value: true
+        save: true
     });
     isNonLinear.elm.on('change', () => {
         if(isNonLinear()) {
