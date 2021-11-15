@@ -468,11 +468,8 @@
         }
         return _data;
     };
-    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478 | 0;
-    const luminanceAlpha = (r, g, b, a) => {
-        const rate = a / 255;
-        return luminance(...[r, g, b].map(v => v * rate));
-    };
+    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478,
+          luminanceAlpha = (r, g, b, a) => luminance(r, g, b) * a / 255;
     const makeDataLuminance = async ({data, calcLuminance}) => {
         const _data = new Uint8ClampedArray(data.length >> 2);
         for(const i of _data.keys()) {
