@@ -41,7 +41,7 @@
             this.img = null;
         }
         async load(url){
-            this.html.empty().append(this.img = await this._load(url));
+            (this.img = await this._load(url)).appendTo(this.html.empty());
         }
     };
     { // 画像入力
@@ -56,14 +56,16 @@
         });
         selectImg.elm.on('change', () => {
             image.load(`img/${selectImg()}`);
-        }).trigger('change');
+        });
         const inputURL = rpgen3.addInputStr(image.config, {
-            label: '外部URL'
+            label: '外部URL',
+            save: true
         });
         inputURL.elm.on('change', () => {
             const urls = rpgen3.findURL(inputURL());
             if(urls.length) image.load(urls[0]);
         });
+        (rpgen3.findURL(inputURL()).length ? inputURL : selectImg).elm.trigger('change');
         $('<input>').appendTo(image.config).prop({
             type: 'file'
         }).on('change', ({target}) => {
