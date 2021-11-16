@@ -293,6 +293,39 @@
             '大津の二値化処理': 2
         }
     });
+    const binarize = new class {
+        constructor(){
+            this.html = $('<div>').appendTo(body);
+        }
+    };
+    // http://whitewell.sakura.ne.jp/OpenCV/py_tutorials/py_imgproc/py_thresholding/py_thresholding.html
+    const selectMethod = rpgen3.addSelect(binarize.html, {
+        label: '適応二値化処理の代表値',
+        save: true,
+        list: {
+            '平均値': 4,
+            '中央値': 0,
+            '最小値': 1,
+            '最大値': 2,
+            '最頻値': 3
+        }
+    });
+    const inputBlockSize = rpgen3.addInputNum(binarize.html, {
+        label: '近傍領域のサイズ[n×n]',
+        save: true,
+        value: 3,
+        min: 3,
+        max: 23,
+        step: 2
+    });
+    const inputC = rpgen3.addInputNum(binarize.html, {
+        label: '計算された閾値から引く定数',
+        save: true,
+        value: 11,
+        min: 0,
+        max: 255
+    });
+    $('<div>').appendTo(body).text('処理の流れ');
     const isDoingMain = rpgen3.addInputBool(body, {
         label: '空間フィルタリングをする',
         save: true,
@@ -582,10 +615,20 @@
     };
     const binarizeAdaptive = async ({lums, width, height, _width, _k, k}) => {
         const _lums = lums.slice(),
-              w = k,
-              _w = k >> 1,
+              w = inputBlockSize(),
+              _w = w >> 1,
               arr = [...Array(w ** 2).keys()],
               len = width * height;
+        const func = (() => {
+            switch(selectMethod()){
+                case 0: return a => rpgen3.median(a);
+                case 1: return a => Math.min(...a);
+                case 2: return a => Math.max(...a);
+                case 3: return a => rpgen3.mode(a);
+                case 4: return a => rpgen3.mean(a);
+            }
+        })();
+        const sub = inputC();
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
@@ -595,7 +638,7 @@
                 arr[i] = lums[toI(_width, x + _x, y + _y)];
             }
             const _i = toI(_width, x + _w, y + _w);
-            _lums[_i] = lums[_i] >= rpgen3.mean(arr) / 1.1 | 0;
+            _lums[_i] = lums[_i] >= func(arr) - sub | 0;
         }
         return _lums;
     };
@@ -605,36 +648,28 @@
               _hist = hist.slice();
         for(const lum of lums) hist[lum]++;
         let sum = 0;
-        for(const [i, v] of hist.entries()) {
-            sum += (_hist[i] = i * v);
-        }
+        for(const [i, v] of hist.entries()) sum += (_hist[i] = i * v);
         let n1 = 0,
             n2 = lums.length,
             _1 = 0,
             _2 = sum;
         const s_max = [0, -10];
         for(const [th, v] of hist.entries()) {
-            // クラス1とクラス2の画素数を計算
-            n1 += v;
+            n1 += v; // クラス1とクラス2の画素数を計算
             n2 -= v;
-            // クラス1とクラス2の画素値の平均を計算
-            const _v = _hist[th];
+            const _v = _hist[th]; // クラス1とクラス2の画素値の平均を計算
             _1 += _v;
             _2 -= _v;
             const mu1 = n1 ? _1 / n1 : 0,
-                  mu2 = n2 ? _2 / n2 : 0;
-            // クラス間分散の分子を計算
-            const s = n1 * n2 * (mu1 - mu2) ** 2;
-            // クラス間分散の分子が最大のとき、クラス間分散の分子と閾値を記録
-            if(s > s_max[1]) {
+                  mu2 = n2 ? _2 / n2 : 0,
+                  s = n1 * n2 * (mu1 - mu2) ** 2; // クラス間分散の分子を計算
+            if(s > s_max[1]) { // クラス間分散の分子が最大のとき、クラス間分散の分子と閾値を記録
                 s_max[0] = th;
                 s_max[1] = s;
             }
         }
-        // クラス間分散が最大のときの閾値を取得
-        const t = s_max[0];
-        // 算出した閾値で二値化処理
-        for(const [i, v] of lums.entries()) lums[i] = v > t | 0;
+        const t = s_max[0]; // クラス間分散が最大のときの閾値を取得
+        for(const [i, v] of lums.entries()) lums[i] = v > t | 0; // 算出した閾値で二値化処理
         return lums;
     };
 })();
