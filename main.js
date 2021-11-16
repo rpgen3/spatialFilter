@@ -80,6 +80,12 @@
             this.html = $('<div>').appendTo(body);
         }
     };
+    const toI = (w, x, y) => x + y * w;
+    const toXY = (w, i) => {
+        const x = i % w,
+              y = i / w | 0;
+        return [x, y];
+    };
     const kernel = new class {
         constructor(){
             this.select = $('<div>').appendTo(body);
@@ -91,9 +97,6 @@
             this.tdMap = new Map;
             this.valueMap = new Map;
         }
-        toI(x, y, k = this.k){
-            return x + y * k;
-        }
         resize(k){
             const _k = k - this.k >> 1,
                   list = [];
@@ -104,9 +107,9 @@
                 const tr = $('<tr>').appendTo(this.html);
                 for(const x of Array(k).keys()) {
                     const [_x, _y] = [x, y].map(v => v - _k),
-                          n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[this.toI(_x, _y)] || 0;
+                          n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[toI(this.k, _x, _y)] || 0;
                     list.push(n);
-                    const i = this.toI(x, y, k);
+                    const i = toI(k, x, y);
                     const td = $('<td>').appendTo(tr).prop({
                         contenteditable: true
                     }).text(n).on('focusout', () => {
@@ -277,9 +280,18 @@
         label: '外周画像の処理',
         save: true,
         list: {
-            '外周部分の画素値をコピー': 1,
             '外周部分を中心にして対称の位置をコピー': 0,
+            '外周部分の画素値をコピー': 1,
             '全部黒': 2
+        }
+    });
+    const selectBinarized = rpgen3.addSelect(body, {
+        label: '二値化手法',
+        save: true,
+        list: {
+            '閾値0x80でAND演算(最速)': 0,
+            '適応二値化処理': 1,
+            '大津の二値化処理': 2
         }
     });
     addBtn(body, '処理開始', () => start());
@@ -342,7 +354,6 @@
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        await msg.print('外周を補完します。');
         const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data,
             width, height, k
@@ -352,31 +363,29 @@
             data: dataOutlined,
             width, height, k
         });
-        await msg.print('輝度を取得します。');
-        const dataLuminance = await makeDataLuminance(dataOutlined);
         const result = await spatialFilter({
-            dataLuminance, width, height, k,
+            width, height, k,
             data: dataOutlined,
             list: list.slice()
         });
-        await msg.print('空間フィルタリング完了');
         output.add({
             label: '出力',
             data: result,
             width, height, k
         });
         output.showTab('出力');
-        await msg.print('出力を反転します。');
         const dataReversed = await makeDataReversed(result);
         output.add({
             label: '反転',
             data: dataReversed,
             width, height, k
         });
-        await msg.print('反転を2値化します。');
-        const dataBinarized = await makeDattaBinarized(dataReversed);
+        const dataBinarized = await makeDataBinarized({
+            data: dataReversed,
+            k, width, height
+        });
         output.add({
-            label: '2値化',
+            label: '二値化',
             data: dataBinarized,
             width, height, k
         });
@@ -390,6 +399,7 @@
         return {_k, __k, _width, _height};
     };
     const makeDataOutlined = async ({data, width, height, k}) => {
+        await msg.print('外周を補完します。');
         const {_k, __k, _width, _height} = calcAny({k, width, height}),
               _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
@@ -401,12 +411,8 @@
         }
         const outline = selectOutline();
         if(outline === 2) return _data;
-        const toI = (x, y) => x + y * _width;
-        const toXY = i => {
-            const x = i % _k,
-                  y = i / _k | 0;
-            return [x, y];
-        };
+        const _toI = (x, y) => toI(_width, x, y),
+              _toXY = i => toXY(_k, i);
         const put = (a, b) => {
             const _a = a << 2,
                   _b = b << 2;
@@ -423,13 +429,13 @@
             ]) {
                 const len = _k ** 2;
                 for(const i of Array(len).keys()) {
-                    const [x, y] = toXY(i);
-                    const _i = outline ? toI(ax + bx, ay + by) : (() => {
+                    const [x, y] = _toXY(i);
+                    const _i = outline ? _toI(ax + bx, ay + by) : (() => {
                         const [cx, cy] = [bx, by].map(v => v - _k + 1), // 外周の対称の起点
-                              [x, y] = toXY(len - i - 1);
-                        return toI(x + ax + bx + cx, y + ay + by + cy);
+                              [x, y] = _toXY(len - i - 1);
+                        return _toI(x + ax + bx + cx, y + ay + by + cy);
                     })();
-                    put(toI(x + ax, y + ay), _i);
+                    put(_toI(x + ax, y + ay), _i);
                 }
             }
         }
@@ -440,8 +446,8 @@
                 for(const a of Array(_k).keys()) {
                     const a1 = a + 1,
                           o = outline ? 0 : a1;
-                    put(toI(kx, _k - a1), toI(kx, _k + o));
-                    put(toI(kx, kh + a1), toI(kx, kh - o));
+                    put(_toI(kx, _k - a1), _toI(kx, _k + o));
+                    put(_toI(kx, kh + a1), _toI(kx, kh - o));
                 }
             }
         }
@@ -452,8 +458,8 @@
                 for(const a of Array(_k).keys()) {
                     const a1 = a + 1,
                           o = outline ? 0 : a1;
-                    put(toI(_k - a1, ky), toI(_k + o, ky));
-                    put(toI(kw + a1, ky), toI(kw - o, ky));
+                    put(_toI(_k - a1, ky), _toI(_k + o, ky));
+                    put(_toI(kw + a1, ky), _toI(kw - o, ky));
                 }
             }
         }
@@ -461,6 +467,7 @@
     };
     const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478;
     const makeDataLuminance = async data => {
+        await msg.print('輝度を取得します。');
         const _data = new Uint8ClampedArray(data.length >> 2);
         for(const i of _data.keys()) {
             const _i = i << 2;
@@ -468,14 +475,13 @@
         }
         return _data;
     };
-    const spatialFilter = async ({dataLuminance, width, height, k, data, list}) => {
+    const spatialFilter = async ({width, height, k, data, list}) => {
         const {_k, __k, _width, _height} = calcAny({k, width, height});
         const _data = data.slice(),
-              toI = (x, y) => x + y * _width,
               len = width * height,
               indexs = list.slice(), // 注目する画素及びその近傍の座標
               sum = [...Array(3).fill(0)]; // 積和の計算結果を格納するためのRGB配列
-        const func = (() => {
+        const func = await (async () => {
             if(isNonLinear()) {
                 const func = (() => {
                     switch(selectNonLinear()) {
@@ -485,8 +491,9 @@
                         case 3: return a => rpgen3.mode(a);
                     }
                 })();
-                const lums = list.slice(); // 輝度値を格納する配列
-                return ({...arg}) => processNonLinear({...arg, func, lums, dataLuminance});
+                const lums = await makeDataLuminance(data),
+                      arr = list.slice(); // 輝度値を格納する配列
+                return ({...arg}) => processNonLinear({...arg, func, lums, arr});
             }
             else {
                 if(isRootSumSquire()) {
@@ -503,16 +510,16 @@
             const x = (i % width) + _k,
                   y = (i / width | 0) + _k;
             for(const i of list.keys()) { // 座標ゲットだぜ！
-                const _x = i % k,
-                      _y = i / k | 0;
+                const [_x, _y] = toXY(k, i);
                 indexs[i] = toI(
+                    _width,
                     x + _x - _k,
                     y + _y - _k
                 ) << 2;
             }
             sum.fill(0); // 0で初期化
             func({data, list, indexs, sum});
-            const _i = toI(x, y) << 2;
+            const _i = toI(_width, x, y) << 2;
             Object.assign(_data.subarray(_i, _i + 3), sum);
         }
         return _data;
@@ -538,17 +545,18 @@
         }
         for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
     };
-    const processNonLinear = ({data, list, indexs, sum, func, lums, dataLuminance}) => {
+    const processNonLinear = ({data, list, indexs, sum, func, lums, arr}) => {
         const m = new Map;
         for(const [i, v] of indexs.entries()) {
-            const lum = dataLuminance[v >> 2];
+            const lum = lums[v >> 2];
             m.set(lum, v);
-            lums[i] = lum;
+            arr[i] = lum;
         }
-        const i = m.get(func(lums));
+        const i = m.get(func(arr));
         Object.assign(sum, data.subarray(i, i + 3));
     };
     const makeDataReversed = async data => {
+        await msg.print('出力を反転します。');
         const _data = data.slice();
         for(const i of Array(data.length >> 2).keys()) {
             const _i = i << 2;
@@ -556,14 +564,46 @@
         }
         return _data;
     };
-    const makeDattaBinarized = async data => {
+    const makeDataBinarized = async ({data, k, width, height}) => {
+        await msg.print('反転を二値化します。');
+        const {_k, __k, _width, _height} = calcAny({k, width, height}),
+              lums = await makeDataLuminance(data);
+        const _lums = (() => {
+            switch(selectBinarized()) {
+                case 0: return binarizeAND(lums);
+                case 1: return binarizeAdaptive({lums, width, height, _width, _k, k});
+                case 2: throw 'err';
+            }
+        })();
         const _data = data.slice();
-        for(const i of Array(data.length >> 2).keys()) {
-            const _i = i << 2,
-                  lum = luminance(...data.subarray(_i, _i + 3)),
-                  bin = lum & 0x80 ? 255 : 0;
-            _data[_i] = _data[_i + 1] = _data[_i + 2] = bin;
+        for(const [i, v] of _lums.entries()) {
+            const _i = i << 2;
+            _data[_i] = _data[_i + 1] = _data[_i + 2] = v ? 255 : 0;
         }
         return _data;
+    };
+    const binarizeAND = lums => {
+        for(const i of Array(lums.length).keys()) lums[i] &= 0x80;
+        return lums;
+    };
+    const binarizeAdaptive = ({lums, width, height, _width, _k, k}) => {
+        const _lums = lums.slice(),
+              w = 3,
+              arr = [...Array(w ** 2).keys()];
+        for(const i of Array(width * height).keys()) {
+            const [x, y] = toXY(width, i).map(v => v + _k);
+            for(const i of arr.keys()) {
+                const [_x, _y] = toXY(w, i);
+                arr[i] = lums[toI(
+                    _width,
+                    x + _x - _k,
+                    y + _y - _k
+                )];
+            }
+            const [_x, _y] = toXY(w, i),
+                  _i = toI(_x + _k, _y + _k);
+            _lums[_i] = lums[_i] > rpgen3.mean(arr) | 0;
+        }
+        return _lums;
     };
 })();
