@@ -282,11 +282,6 @@
             '全部黒': 2
         }
     });
-    const isIgnoredAlpha = rpgen3.addInputBool(body, {
-        label: '不透明度をすべて無視',
-        save: true,
-        value: true
-    });
     addBtn(body, '処理開始', () => start());
     const msg = new class {
         constructor(){
@@ -302,12 +297,10 @@
             this.tab = $('<div>').appendTo(foot);
             this.html = $('<div>').appendTo(foot);
             this.list = new Map;
-            this.isOpacity = false;
         }
         init(){
             this.tab.add(this.html).empty();
             this.list.clear();
-            this.isOpacity = isIgnoredAlpha();
         }
         add({label, data, width, height, k}){
             const {_k, __k, _width, _height} = calcAny({k, width, height}),
@@ -333,10 +326,8 @@
             );
         }
         toOpacity(data){
-            if(!this.isOpacity) return data;
-            const _data = data.slice();
-            for(let i = 3; i < data.length; i += 4) _data[i] = 255;
-            return _data;
+            for(let i = 3; i < data.length; i += 4) data[i] = 255;
+            return data;
         }
     };
     const makeCanvas = (width, height) => {
@@ -362,11 +353,7 @@
             width, height, k
         });
         await msg.print('輝度を取得します。');
-        const calcLuminance = isIgnoredAlpha() ? luminance : luminanceAlpha;
-        const dataLuminance = await makeDataLuminance({ // 輝度を計算した配列
-            data: dataOutlined,
-            calcLuminance
-        });
+        const dataLuminance = await makeDataLuminance(dataOutlined);
         const result = await spatialFilter({
             dataLuminance, width, height, k,
             data: dataOutlined,
@@ -387,10 +374,7 @@
             width, height, k
         });
         await msg.print('反転を2値化します。');
-        const dataBinarized = await makeDattaBinarized({
-            data: dataReversed,
-            calcLuminance
-        });
+        const dataBinarized = await makeDattaBinarized(dataReversed);
         output.add({
             label: '2値化',
             data: dataBinarized,
@@ -413,7 +397,7 @@
                   y = i / width | 0,
                   a = i << 2,
                   b = (x + _k) + (y + _k) * _width << 2;
-            Object.assign(_data.subarray(b, b + 4), data.subarray(a, a + 4));
+            Object.assign(_data.subarray(b, b + 3), data.subarray(a, a + 3));
         }
         const outline = selectOutline();
         if(outline === 2) return _data;
@@ -426,7 +410,7 @@
         const put = (a, b) => {
             const _a = a << 2,
                   _b = b << 2;
-            Object.assign(_data.subarray(_a, _a + 4), _data.subarray(_b, _b + 4));
+            Object.assign(_data.subarray(_a, _a + 3), _data.subarray(_b, _b + 3));
         };
         { // 四隅
             const w = _k + width,
@@ -475,13 +459,12 @@
         }
         return _data;
     };
-    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478,
-          luminanceAlpha = (r, g, b, a) => luminance(r, g, b) * a / 255;
-    const makeDataLuminance = async ({data, calcLuminance}) => {
+    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478;
+    const makeDataLuminance = async data => {
         const _data = new Uint8ClampedArray(data.length >> 2);
         for(const i of _data.keys()) {
             const _i = i << 2;
-            _data[i] = calcLuminance(...data.subarray(_i, _i + 4));
+            _data[i] = luminance(...data.subarray(_i, _i + 3));
         }
         return _data;
     };
@@ -491,7 +474,7 @@
               toI = (x, y) => x + y * _width,
               len = width * height,
               indexs = list.slice(), // 注目する画素及びその近傍の座標
-              sum = [...Array(4).fill(0)]; // 積和の計算結果を格納するためのRGBA配列
+              sum = [...Array(3).fill(0)]; // 積和の計算結果を格納するためのRGB配列
         const func = (() => {
             if(isNonLinear()) {
                 const func = (() => {
@@ -530,30 +513,30 @@
             sum.fill(0); // 0で初期化
             func({data, list, indexs, sum});
             const _i = toI(x, y) << 2;
-            Object.assign(_data.subarray(_i, _i + 4), sum);
+            Object.assign(_data.subarray(_i, _i + 3), sum);
         }
         return _data;
     };
     const processLinear = ({data, list, indexs, sum}) => {
         for(const [i, v] of indexs.entries()) {
-            const rgba = data.subarray(v, v + 4),
+            const rgb = data.subarray(v, v + 3),
                   k = list[i];
-            for(let i = 0; i < 4; i++) sum[i] += rgba[i] * k;
+            for(let i = 0; i < 3; i++) sum[i] += rgb[i] * k;
         }
     };
     const processLinear2 = ({data, list, indexs, sum, _list, _sum}) => {
         _sum.fill(0);
         for(const [i, v] of indexs.entries()) {
-            const rgba = data.subarray(v, v + 4),
+            const rgb = data.subarray(v, v + 3),
                   k = list[i],
                   _k = _list[i];
-            for(let i = 0; i < 4; i++) {
-                const v = rgba[i];
+            for(let i = 0; i < 3; i++) {
+                const v = rgb[i];
                 sum[i] += v * k;
                 _sum[i] += v * _k;
             }
         }
-        for(let i = 0; i < 4; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
+        for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
     };
     const processNonLinear = ({data, list, indexs, sum, func, lums, dataLuminance}) => {
         const m = new Map;
@@ -563,7 +546,7 @@
             lums[i] = lum;
         }
         const i = m.get(func(lums));
-        Object.assign(sum, data.subarray(i, i + 4));
+        Object.assign(sum, data.subarray(i, i + 3));
     };
     const makeDataReversed = async data => {
         const _data = data.slice();
@@ -573,15 +556,13 @@
         }
         return _data;
     };
-    const makeDattaBinarized = async ({data, calcLuminance}) => {
-        const _data = data.slice(),
-              b = calcLuminance === luminanceAlpha;
+    const makeDattaBinarized = async data => {
+        const _data = data.slice();
         for(const i of Array(data.length >> 2).keys()) {
             const _i = i << 2,
-                  lum = calcLuminance(...data.subarray(_i, _i + 4)),
+                  lum = luminance(...data.subarray(_i, _i + 3)),
                   bin = lum & 0x80 ? 255 : 0;
             _data[_i] = _data[_i + 1] = _data[_i + 2] = bin;
-            if(b) _data[_i + 3] = bin;
         }
         return _data;
     };
