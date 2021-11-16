@@ -151,8 +151,7 @@
         const w = Math.sqrt(arr.length),
               _arr = arr.slice();
         for(const [i, v] of arr.entries()) {
-            const x = i % w,
-                  y = i / w | 0;
+            const [x, y] = toXY(w, i);
             _arr[y + x * w] = v;
         }
         return _arr;
@@ -404,8 +403,7 @@
         const {_k, __k, _width, _height} = calcAny({k, width, height}),
               _data = new Uint8ClampedArray(_width * _height << 2);
         for(const i of Array(width * height).keys()) {
-            const x = i % width,
-                  y = i / width | 0,
+            const [x, y] = toXY(width, i),
                   a = i << 2,
                   b = (x + _k) + (y + _k) * _width << 2;
             Object.assign(_data.subarray(b, b + 3), data.subarray(a, a + 3));
@@ -508,19 +506,14 @@
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
             if(!(++cnt % 1000)) await msg.print(`空間フィルタリング(${i}/${len})`);
-            const x = (i % width) + _k,
-                  y = (i / width | 0) + _k;
+            const [x, y] = toXY(width, i);
             for(const i of list.keys()) { // 座標ゲットだぜ！
                 const [_x, _y] = toXY(k, i);
-                indexs[i] = toI(
-                    _width,
-                    x + _x - _k,
-                    y + _y - _k
-                ) << 2;
+                indexs[i] = toI(_width, x + _x, y + _y) << 2;
             }
             sum.fill(0); // 0で初期化
             func({data, list, indexs, sum});
-            const _i = toI(_width, x, y) << 2;
+            const _i = toI(_width, x + _k, y + _k) << 2;
             Object.assign(_data.subarray(_i, _i + 3), sum);
         }
         return _data;
@@ -589,23 +582,20 @@
     };
     const binarizeAdaptive = async ({lums, width, height, _width, _k, k}) => {
         const _lums = lums.slice(),
-              w = 3,
+              w = k,
+              _w = k >> 1,
               arr = [...Array(w ** 2).keys()],
               len = width * height;
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
-            const [x, y] = toXY(width, i).map(v => v + _k);
+            const [x, y] = toXY(width, i);
             for(const i of arr.keys()) {
                 const [_x, _y] = toXY(w, i);
-                arr[i] = lums[toI(
-                    _width,
-                    x + _x - _k,
-                    y + _y - _k
-                )];
+                arr[i] = lums[toI(_width, x + _x, y + _y)];
             }
-            const _i = toI(x, y);
-            _lums[_i] = lums[_i] > rpgen3.mean(arr) | 0;
+            const _i = toI(_width, x + _w, y + _w);
+            _lums[_i] = lums[_i] >= rpgen3.mean(arr) | 0;
         }
         return _lums;
     };
