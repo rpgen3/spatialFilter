@@ -20,7 +20,8 @@
     Promise.all([
         'table',
         'kernel',
-        'tab'
+        'tab',
+        'img'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     const addBtn = (h, ttl, func) => $('<button>').appendTo(h).text(ttl).on('click', func);
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
