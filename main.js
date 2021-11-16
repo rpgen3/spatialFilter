@@ -566,7 +566,7 @@
             switch(selectBinarized()) {
                 case 0: return binarizeAND(lums);
                 case 1: return binarizeAdaptive({lums, width, height, _width, _k, k});
-                case 2: throw 'err';
+                case 2: return binarizeOtsu(lums);
             }
         })();
         const _data = data.slice();
@@ -595,8 +595,46 @@
                 arr[i] = lums[toI(_width, x + _x, y + _y)];
             }
             const _i = toI(_width, x + _w, y + _w);
-            _lums[_i] = lums[_i] >= rpgen3.mean(arr) | 0;
+            _lums[_i] = lums[_i] >= rpgen3.mean(arr) / 1.1 | 0;
         }
         return _lums;
+    };
+    // https://algorithm.joho.info/programming/python/opencv-otsu-thresholding-py/
+    const binarizeOtsu = lums => {
+        const hist = [...Array(256).fill(0)],
+              _hist = hist.slice();
+        for(const lum of lums) hist[lum]++;
+        let sum = 0;
+        for(const [i, v] of hist.entries()) {
+            sum += (_hist[i] = i * v);
+        }
+        let n1 = 0,
+            n2 = lums.length,
+            _1 = 0,
+            _2 = sum;
+        const s_max = [0, -10];
+        for(const [th, v] of hist.entries()) {
+            // クラス1とクラス2の画素数を計算
+            n1 += v;
+            n2 -= v;
+            // クラス1とクラス2の画素値の平均を計算
+            const _v = _hist[th];
+            _1 += _v;
+            _2 -= _v;
+            const mu1 = n1 ? _1 / n1 : 0,
+                  mu2 = n2 ? _2 / n2 : 0;
+            // クラス間分散の分子を計算
+            const s = n1 * n2 * (mu1 - mu2) ** 2;
+            // クラス間分散の分子が最大のとき、クラス間分散の分子と閾値を記録
+            if(s > s_max[1]) {
+                s_max[0] = th;
+                s_max[1] = s;
+            }
+        }
+        // クラス間分散が最大のときの閾値を取得
+        const t = s_max[0];
+        // 算出した閾値で二値化処理
+        for(const [i, v] of lums.entries()) lums[i] = v > t | 0;
+        return lums;
     };
 })();
