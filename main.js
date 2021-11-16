@@ -294,6 +294,21 @@
             '大津の二値化処理': 2
         }
     });
+    const isDoingMain = rpgen3.addInputBool(body, {
+        label: '空間フィルタリングをする',
+        save: true,
+        value: true
+    });
+    const isDoingReverse = rpgen3.addInputBool(body, {
+        label: '反転する',
+        save: true,
+        value: true
+    });
+    const isDoingBinarize = rpgen3.addInputBool(body, {
+        label: '二値化する',
+        save: true,
+        value: true
+    });
     addBtn(body, '処理開始', () => start());
     const msg = new class {
         constructor(){
@@ -354,41 +369,27 @@
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        const dataOutlined = await makeDataOutlined({ // 外周を埋めた配列
+        let data = await makeDataOutlined({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data,
             width, height, k
         });
-        output.add({
-            label: '入力',
-            data: dataOutlined,
-            width, height, k
-        });
-        const result = await spatialFilter({
-            width, height, k,
-            data: dataOutlined,
-            list: list.slice()
-        });
-        output.add({
-            label: '出力',
-            data: result,
-            width, height, k
-        });
-        output.showTab('出力');
-        const dataReversed = await makeDataReversed(result);
-        output.add({
-            label: '反転',
-            data: dataReversed,
-            width, height, k
-        });
-        const dataBinarized = await makeDataBinarized({
-            data: dataReversed,
-            k, width, height
-        });
-        output.add({
-            label: '二値化',
-            data: dataBinarized,
-            width, height, k
-        });
+        const _output = label => {
+            output.add({data, width, height, k, label});
+            output.showTab(label);
+        };
+        _output('入力');
+        if(isDoingMain()) {
+            data = await spatialFilter({data, width, height, k, list: list.slice()});
+            _output('出力');
+        }
+        if(isDoingReverse()) {
+            data = await makeDataReversed(data);
+            _output('反転');
+        }
+        if(isDoingBinarize()){
+            data = await makeDataBinarized({data, k, width, height});
+            _output('二値化');
+        }
         await msg.print('全ての処理が完了しました。');
     };
     const calcAny = ({k, width, height}) => { // 地味に必要な計算
@@ -478,7 +479,6 @@
     const spatialFilter = async ({width, height, k, data, list}) => {
         const {_k, __k, _width, _height} = calcAny({k, width, height});
         const _data = data.slice(),
-              len = width * height,
               indexs = list.slice(), // 注目する画素及びその近傍の座標
               sum = [...Array(3).fill(0)]; // 積和の計算結果を格納するためのRGB配列
         const func = await (async () => {
@@ -504,6 +504,7 @@
                 else return ({...arg}) => processLinear({...arg});
             }
         })();
+        const len = width * height;
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
             if(!(++cnt % 1000)) await msg.print(`空間フィルタリング(${i}/${len})`);
@@ -568,7 +569,7 @@
         await msg.print('反転を二値化します。');
         const {_k, __k, _width, _height} = calcAny({k, width, height}),
               lums = await makeDataLuminance(data);
-        const _lums = (() => {
+        const _lums = await (async () => {
             switch(selectBinarized()) {
                 case 0: return binarizeAND(lums);
                 case 1: return binarizeAdaptive({lums, width, height, _width, _k, k});
@@ -586,11 +587,14 @@
         for(const i of Array(lums.length).keys()) lums[i] &= 0x80;
         return lums;
     };
-    const binarizeAdaptive = ({lums, width, height, _width, _k, k}) => {
+    const binarizeAdaptive = async ({lums, width, height, _width, _k, k}) => {
         const _lums = lums.slice(),
               w = 3,
-              arr = [...Array(w ** 2).keys()];
-        for(const i of Array(width * height).keys()) {
+              arr = [...Array(w ** 2).keys()],
+              len = width * height;
+        let cnt = 0;
+        for(const i of Array(len).keys()) {
+            if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
             const [x, y] = toXY(width, i).map(v => v + _k);
             for(const i of arr.keys()) {
                 const [_x, _y] = toXY(w, i);
