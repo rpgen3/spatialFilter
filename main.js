@@ -604,8 +604,7 @@
                     y + _y - _k
                 )];
             }
-            const [_x, _y] = toXY(w, i),
-                  _i = toI(_x + _k, _y + _k);
+            const _i = toI(x, y);
             _lums[_i] = lums[_i] > rpgen3.mean(arr) | 0;
         }
         return _lums;
