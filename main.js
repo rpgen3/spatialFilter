@@ -258,7 +258,10 @@
             '中央値フィルタ': 0,
             '最小値フィルタ': 1,
             '最大値フィルタ': 2,
-            '最頻値フィルタ': 3
+            '最頻値フィルタ': 3,
+            '刈り込み平均値フィルタ': 4,
+            'Winsorized平均値フィルタ': 5,
+            'ミッドレンジフィルタ': 6
         }
     });
     const isRootSumSquire = rpgen3.addInputBool(kernel.foot, {
@@ -303,11 +306,15 @@
         label: '適応二値化処理の代表値',
         save: true,
         list: {
-            '平均値': 4,
+            '大津の二値化': -2,
+            '平均値': -1,
             '中央値': 0,
             '最小値': 1,
             '最大値': 2,
-            '最頻値': 3
+            '最頻値': 3,
+            '刈り込み平均値': 4,
+            'Winsorized平均値': 5,
+            'ミッドレンジ': 6
         }
     });
     const inputBlockSize = rpgen3.addInputNum(binarize.html, {
@@ -520,6 +527,9 @@
                         case 1: return a => Math.min(...a);
                         case 2: return a => Math.max(...a);
                         case 3: return a => rpgen3.mode(a);
+                        case 4: return a => rpgen3.meanTrim(a);
+                        case 5: return a => rpgen3.meanTrim(a, 0.1, true);
+                        case 6: return a => rpgen3.midrange(a);
                     }
                 })();
                 const lums = await makeDataLuminance(data),
@@ -621,11 +631,15 @@
               len = width * height;
         const func = (() => {
             switch(selectMethod()){
+                case -2: return a => rpgen4.otsu(a);
+                case -1: return a => rpgen3.mean(a);
                 case 0: return a => rpgen3.median(a);
                 case 1: return a => Math.min(...a);
                 case 2: return a => Math.max(...a);
                 case 3: return a => rpgen3.mode(a);
-                case 4: return a => rpgen3.mean(a);
+                case 4: return a => rpgen3.meanTrim(a);
+                case 5: return a => rpgen3.meanTrim(a, 0.1, true);
+                case 6: return a => rpgen3.midrange(a);
             }
         })();
         const sub = inputC();
@@ -642,33 +656,9 @@
         }
         return _lums;
     };
-    // https://algorithm.joho.info/programming/python/opencv-otsu-thresholding-py/
+    const rpgen4 = await import('https://rpgen3.github.io/spatialFilter/mjs/binarize.mjs');
     const binarizeOtsu = lums => {
-        const hist = [...Array(256).fill(0)],
-              _hist = hist.slice();
-        for(const lum of lums) hist[lum]++;
-        let sum = 0;
-        for(const [i, v] of hist.entries()) sum += (_hist[i] = i * v);
-        let n1 = 0,
-            n2 = lums.length,
-            _1 = 0,
-            _2 = sum;
-        const s_max = [0, -10];
-        for(const [th, v] of hist.entries()) {
-            n1 += v; // クラス1とクラス2の画素数を計算
-            n2 -= v;
-            const _v = _hist[th]; // クラス1とクラス2の画素値の平均を計算
-            _1 += _v;
-            _2 -= _v;
-            const mu1 = n1 ? _1 / n1 : 0,
-                  mu2 = n2 ? _2 / n2 : 0,
-                  s = n1 * n2 * (mu1 - mu2) ** 2; // クラス間分散の分子を計算
-            if(s > s_max[1]) { // クラス間分散の分子が最大のとき、クラス間分散の分子と閾値を記録
-                s_max[0] = th;
-                s_max[1] = s;
-            }
-        }
-        const t = s_max[0]; // クラス間分散が最大のときの閾値を取得
+        const t = rpgen4.otsu(lums);
         for(const [i, v] of lums.entries()) lums[i] = v > t | 0; // 算出した閾値で二値化処理
         return lums;
     };
