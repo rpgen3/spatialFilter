@@ -5,6 +5,7 @@ export const linear = ({data, index, kernel, sum}) => {
               k = kernel[i];
         for(let i = 0; i < 3; i++) sum[i] += rgb[i] * k;
     }
+    return sum;
 };
 export const linear2 = ({data, index, kernel, sum, _kernel, _sum}) => {
     sum.fill(0);
@@ -20,6 +21,7 @@ export const linear2 = ({data, index, kernel, sum, _kernel, _sum}) => {
         }
     }
     for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
+    return sum;
 };
 export const nonLinear = ({data, index, kernel, sum, luminance, func}) => {
     const m = new Map;
@@ -30,4 +32,5 @@ export const nonLinear = ({data, index, kernel, sum, luminance, func}) => {
     }
     const i = m.get(func(kernel));
     Object.assign(sum, data.subarray(i, i + 3));
+    return sum;
 };
