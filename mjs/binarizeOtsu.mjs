@@ -1,5 +1,5 @@
 // https://algorithm.joho.info/programming/python/opencv-otsu-thresholding-py/
-export const otsu = luminance => { // 大津の手法（判別分析法）
+export const binarizeOtsu = luminance => { // 大津の手法（判別分析法）
     const hist = [...Array(256).fill(0)],
           _hist = hist.slice();
     for(const lum of luminance) hist[lum]++;
