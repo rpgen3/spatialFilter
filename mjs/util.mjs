@@ -4,6 +4,15 @@ export const toXY = (w, i) => {
           y = i / w | 0;
     return [x, y];
 };
+export const toTransposed = arr => { // 正方の転置行列
+    const w = Math.sqrt(arr.length),
+          _arr = arr.slice();
+    for(const [i, v] of arr.entries()) {
+        const [x, y] = toXY(w, i);
+        _arr[y + x * w] = v;
+    }
+    return _arr;
+};
 export const calcAny = ({k, width, height}) => { // 地味に必要な計算
     const _k = k >> 1, // 端の幅
           __k = _k << 1, // 両端の幅
