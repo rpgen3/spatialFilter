@@ -1,4 +1,5 @@
 export const linear = ({data, index, kernel, sum}) => {
+    sum.fill(0);
     for(const [i, v] of index.entries()) {
         const rgb = data.subarray(v, v + 3),
               k = kernel[i];
@@ -6,6 +7,7 @@ export const linear = ({data, index, kernel, sum}) => {
     }
 };
 export const linear2 = ({data, index, kernel, sum, _kernel, _sum}) => {
+    sum.fill(0);
     _sum.fill(0);
     for(const [i, v] of index.entries()) {
         const rgb = data.subarray(v, v + 3),
