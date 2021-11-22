@@ -123,6 +123,14 @@ dl,dt,dd {
             '全部黒': 2
         }
     });
+    const inputKernelSize = rpgen3.addInputNum(main, {
+        label: '局所領域[n×n]',
+        save: true,
+        value: 3,
+        min: 3,
+        max: 23,
+        step: 2
+    });
     const addHideArea = (label, parentNode = main) => {
         const html = $('<div>').addClass('container').appendTo(parentNode);
         const input = rpgen3.addInputBool(html, {
@@ -248,14 +256,6 @@ dl,dt,dd {
             ]
         };
     })();
-    const makeK = (html, label) => rpgen3.addInputNum(html, {
-        label: `${label}の近傍領域[n×n]`,
-        save: true,
-        value: 3,
-        min: 3,
-        max: 23,
-        step: 2
-    });
     const linear = new class {
         constructor(){
             const html = spatialFilter.linear;
@@ -264,8 +264,7 @@ dl,dt,dd {
                 save: true,
                 list: linearList
             });
-            this.k = makeK(html, '線形フィルタ');
-            this.kHTML = $('<div>').appendTo(html);
+            this.kernel = $('<div>').appendTo(html);
             this.isTr = rpgen3.addInputBool(html, {
                 label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
                 save: true
@@ -288,12 +287,11 @@ dl,dt,dd {
                     'ミッドレンジ': 6
                 }
             });
-            this.k = makeK(html, '非線形フィルタ');
         }
     };
     const kernel = new class {
         constructor(){
-            this.html = $('<table>').appendTo(linear.kHTML);
+            this.html = $('<table>').appendTo(linear.kernel);
             this.k = 0;
             this.list = [];
             this.tdMap = new Map;
@@ -339,8 +337,8 @@ dl,dt,dd {
             td.text(this.valueMap.get(i));
         }
     };
-    linear.k.elm.on('change', () => {
-        kernel.resize(linear.k());
+    inputKernelSize.elm.on('change', () => {
+        kernel.resize(inputKernelSize());
     }).trigger('change');
     linear.select.elm.on('change', () => {
         const k = linear.select();
@@ -536,7 +534,7 @@ dl,dt,dd {
         const _lums = await (async () => {
             switch(binarize.select()) {
                 case 0: return rpgen4.binarizeAND(lums);
-                case 1: return mainAdaptive({lums, width, height, _width, _k, k});
+                case 1: return mainAdaptive({lums, width, height, _width, k, _k});
                 case 2: return mainOtsu(lums);
             }
         })();
@@ -547,11 +545,9 @@ dl,dt,dd {
         }
         return _data;
     };
-    const mainAdaptive = async ({lums, width, height, _width, _k, k}) => {
+    const mainAdaptive = async ({lums, width, height, _width, k, _k}) => {
         const _lums = lums.slice(),
-              w = k,
-              _w = w >> 1,
-              arr = [...Array(w ** 2).keys()],
+              arr = [...Array(k ** 2).keys()],
               len = width * height;
         const func = (() => {
             switch(adaptive.select()){
@@ -573,10 +569,10 @@ dl,dt,dd {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
             const [x, y] = toXY(width, i);
             for(const i of arr.keys()) {
-                const [_x, _y] = toXY(w, i);
+                const [_x, _y] = toXY(k, i);
                 arr[i] = lums[toI(_width, x + _x, y + _y)];
             }
-            const _i = toI(_width, x + _w, y + _w);
+            const _i = toI(_width, x + _k, y + _k);
             _lums[_i] = lums[_i] >= func(arr) - sub | 0;
         }
         return _lums;
