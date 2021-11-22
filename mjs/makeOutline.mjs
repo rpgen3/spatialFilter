@@ -1,5 +1,5 @@
 import {toI, toXY, calcAny} from 'https://rpgen3.github.io/spatialFilter/mjs/util.mjs';
-export const makeOutline = ({data, width, height, k, outline = 1}) => {
+export const makeOutline = ({data, width, height, k, outline = 0}) => {
     const {_k, __k, _width, _height} = calcAny({k, width, height}),
           _data = new Uint8ClampedArray(_width * _height << 2);
     for(const i of Array(width * height).keys()) {
