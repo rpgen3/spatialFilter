@@ -17,6 +17,7 @@ dl {
 	background-color: #FFF;
 	border-top: 1px solid #DDD;
 	border-left: 1px solid #DDD;
+	width: 90%;
 }
 
 dl dt {
