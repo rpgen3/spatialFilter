@@ -7,46 +7,82 @@
         padding: '1em',
         'user-select': 'none'
     });
-    const head = $('<dl>').appendTo(html),
-          body = $('<dl>').appendTo(html),
-          foot = $('<dl>').appendTo(html);
+    const head = $('<header>').appendTo(html),
+          main = $('<main>').appendTo(html),
+          foot = $('<footer>').appendTo(html);
+    $('<h1>').appendTo(head).text('空間フィルタリングのテスト');
     const rpgen3 = await importAll([
         'input',
         'css',
         'url',
         'hankaku',
-        'sample'
+        'sample',
+        'util'
     ].map(v => `https://rpgen3.github.io/mylib/export/${v}.mjs`));
+    const rpgen4 = await importAll([
+        'binarizeAND',
+        'binarizeOtsu',
+        'main',
+        'makeLuminance',
+        'makeOutline',
+        'toReverse',
+        'util'
+    ].map(v => `https://rpgen3.github.io/spatialFilter/mjs/${v}.mjs`));
     Promise.all([
         'table',
         'kernel',
         'tab',
         'img'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
-    const addBtn = (h, ttl, func) => $('<button>').appendTo(h).text(ttl).on('click', func);
-    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-    $('<div>').appendTo(head).text('空間フィルタリングのテスト');
-    $('<div>').appendTo(head).text('処理する画像の設定');
-    const makeLoadFunc = ctor => url => new Promise((resolve, reject) => Object.assign(new ctor, {
-        onload: ({target}) => resolve(target),
-        onloadedmetadata: ({target}) => resolve(target),
-        onerror: reject,
-        crossOrigin: 'anonymous',
-        src: url
-    }));
+    $('<style>').appendTo(html).html(`
+    .container {
+    border: 4px solid;
+    border-radius: 8px;
+    }
+dl,dt,dd {
+  margin: 0;
+  padding: 0;
+}
+    dl {
+    display: flex;
+    flex-wrap: wrap;
+    margin: 20px;
+    background-color: #FFF;
+  border-top: 1px solid #DDD;
+  border-left: 1px solid #DDD;
+    }
+    dl dt {
+    background-color: #EEE;
+  font-weight: bold;
+    }
+    dl dt, dl dd {
+    width: 50%;
+    padding: 15px;
+  box-sizing: border-box;
+  border-right:  1px solid #DDD;
+  border-bottom: 1px solid #DDD;
+    }
+    dl dd input {
+    width: 80%;
+    }
+    `);
+    $('<h2>').appendTo(head).text('処理する画像の設定');
     const image = new class {
         constructor(){
-            this.config = $('<div>').appendTo(head);
-            this.html = $('<div>').appendTo(head);
-            this._load = makeLoadFunc(Image);
+            const html = $('<div>').appendTo(head).addClass('container');
+            $('<h3>').appendTo(html).text('選べる３種類の入力方法');
+            this.input = $('<dl>').appendTo(html);
+            this.output = $('<div>').appendTo(html);
+            this._load = rpgen3.makeLoader(Image);
             this.img = null;
         }
         async load(url){
-            $(this.img = await this._load(url)).appendTo(this.html.empty());
+            $(this.img = await this._load(url)).appendTo(this.output.empty());
         }
     };
     { // 画像入力
-        const selectImg = rpgen3.addSelect(image.config, {
+        const {input} = image;
+        const selectImg = rpgen3.addSelect(input, {
             label: 'サンプル画像',
             save: true,
             list: {
@@ -58,125 +94,96 @@
         selectImg.elm.on('change', () => {
             image.load(`img/${selectImg()}`);
         });
-        const inputURL = rpgen3.addInputStr(image.config, {
+        const inputURL = rpgen3.addInputStr(input, {
             label: '外部URL',
             save: true
+        });
+        inputURL.elm.prop({
+            placeholder: 'CORS非対応のURLは使えません'
         });
         inputURL.elm.on('change', () => {
             const urls = rpgen3.findURL(inputURL());
             if(urls.length) image.load(urls[0]);
         });
         (rpgen3.findURL(inputURL()).length ? inputURL : selectImg).elm.trigger('change');
-        $('<input>').appendTo(image.config).prop({
+        $('<dt>').appendTo(input).text('ファイル入力');
+        $('<input>').appendTo($('<dd>').appendTo(input)).prop({
             type: 'file'
         }).on('change', ({target}) => {
             const {files} = target;
             if(files.length) image.load(URL.createObjectURL(files[0]));
         });
     }
-    const nonLinear = new class {
-        constructor(){
-            this.config = $('<div>').appendTo(body);
-            this.html = $('<div>').appendTo(body);
-        }
-    };
-    const toI = (w, x, y) => x + y * w;
-    const toXY = (w, i) => {
-        const x = i % w,
-              y = i / w | 0;
-        return [x, y];
-    };
-    const kernel = new class {
-        constructor(){
-            this.select = $('<div>').appendTo(body);
-            this.config = $('<div>').appendTo(body);
-            this.html = $('<table>').appendTo(body);
-            this.foot = $('<div>').appendTo(body);
-            this.k = 0;
-            this.list = [];
-            this.tdMap = new Map;
-            this.valueMap = new Map;
-        }
-        resize(k){
-            const _k = k - this.k >> 1,
-                  list = [];
-            this.html.empty();
-            this.tdMap.clear();
-            this.valueMap.clear();
-            for(const y of Array(k).keys()) {
-                const tr = $('<tr>').appendTo(this.html);
-                for(const x of Array(k).keys()) {
-                    const [_x, _y] = [x, y].map(v => v - _k),
-                          n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[toI(this.k, _x, _y)] || 0;
-                    list.push(n);
-                    const i = toI(k, x, y);
-                    const td = $('<td>').appendTo(tr).prop({
-                        contenteditable: true
-                    }).text(n).on('focusout', () => {
-                        this.input(i, rpgen3.toHan(td.text()));
-                    }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
-                    this.tdMap.set(i, td);
-                    this.valueMap.set(i, n);
-                }
-            }
-            this.k = k;
-            this.list = list;
-        }
-        input(i, value){
-            const td = this.tdMap.get(i);
-            try {
-                const n = Number(new Function(`return ${value}`)());
-                if(!Number.isNaN(n)) {
-                    this.list[i] = n;
-                    td.text(value);
-                    this.valueMap.set(i, value);
-                }
-            }
-            catch {}
-            td.text(this.valueMap.get(i));
-        }
-    };
-    const inputKernelSize = rpgen3.addInputNum(kernel.config, {
-        label: 'カーネルサイズ[n×n]',
-        save: true,
-        value: 3,
-        min: 3,
-        max: 23,
-        step: 2
-    });
-    inputKernelSize.elm.on('change', () => {
-        kernel.resize(inputKernelSize());
-    }).trigger('change');
-    const toTransposed = arr => { // 正方の転置行列
-        const w = Math.sqrt(arr.length),
-              _arr = arr.slice();
-        for(const [i, v] of arr.entries()) {
-            const [x, y] = toXY(w, i);
-            _arr[y + x * w] = v;
-        }
-        return _arr;
-    };
-    const kernelPrewitt = [
-        -1, 0, 1,
-        -1, 0, 1,
-        -1, 0, 1
-    ];
-    const kernelSobel = [
-        -1, 0, 1,
-        -2, 0, 2,
-        -1, 0, 1
-    ];
-    const kernelSobel5 = [
-        -1, -2, 0, 2, 1,
-        -4, -8, 0, 8, 4,
-        -6, -12, 0,12, 6,
-        -4, -8, 0, 8, 4,
-        -1, -2, 0, 2, 1
-    ];
-    const selectLinear = rpgen3.addSelect(kernel.select, {
-        label: '線形フィルタ',
+    const selectOutline = rpgen3.addSelect(main, {
+        label: '外周画像の処理',
         save: true,
         list: {
+            '外周部分を中心にして対称の位置をコピー': 0,
+            '外周部分の画素値をコピー': 1,
+            '全部黒': 2
+        }
+    });
+    const addHideArea = (label, parentNode = main) => {
+        const html = $('<div>').addClass('container').appendTo(parentNode);
+        const input = rpgen3.addInputBool(html, {
+            label,
+            save: true
+        });
+        const area = $('<div>').appendTo(html);
+        const time = 500;
+        input.elm.on('change', () => input() ? area.show(time) : area.hide(time)).trigger('change');
+        return Object.assign(input, {
+            get html(){
+                return area;
+            }
+        });
+    };
+    const spatialFilter = new class {
+        constructor(){
+            this.isOpened = addHideArea('空間フィルタリングを行う');
+            const html = this.isOpened.html;
+            this.select = rpgen3.addSelect(html, {
+                label: 'フィルタの線形性',
+                save: true,
+                list: {
+                    '線形': true,
+                    '非線形': false
+                }
+            });
+            this.linear = $('<div>').appendTo(html);
+            this.nonLinear = $('<div>').appendTo(html);
+            this.select.elm.on('change', () => {
+                if(this.select()) {
+                    this.linear.show();
+                    this.nonLinear.hide();
+                }
+                else {
+                    this.linear.hide();
+                    this.nonLinear.show();
+                }
+            }).trigger('change');
+        }
+    };
+    const linearList = (() => {
+        const kernelPrewitt = [
+            -1, 0, 1,
+            -1, 0, 1,
+            -1, 0, 1
+        ];
+        const kernelSobel = [
+            -1, 0, 1,
+            -2, 0, 2,
+            -1, 0, 1
+        ];
+        const kernelSobel5 = [
+            -1, -2, 0, 2, 1,
+            -4, -8, 0, 8, 4,
+            -6, -12, 0,12, 6,
+            -4, -8, 0, 8, 4,
+            -1, -2, 0, 2, 1
+        ];
+        const {toTransposed} = rpgen4;
+        return {
             '平均値フィルタ(3x3)': Array(9).fill('1/9'),
             '平均値フィルタ(5x5)': Array(25).fill('1/25'),
             '平均値フィルタ(7x7)': Array(49).fill('1/49'),
@@ -239,129 +246,174 @@
                 0, 1, 2, 1, 0,
                 0, 0, 1, 0, 0
             ]
-        }
-    });
-    selectLinear.elm.on('change', () => {
-        const k = selectLinear();
-        inputKernelSize(Math.sqrt(k.length));
-        inputKernelSize.elm.trigger('change');
-        for(const [i, v] of k.entries()) kernel.input(i, v);
-    }).trigger('change');
-    const isNonLinear = rpgen3.addInputBool(nonLinear.config, {
-        label: '非線形フィルタを使う',
-        save: true
-    });
-    const selectNonLinear = rpgen3.addSelect(nonLinear.html, {
-        label: '非線形フィルタ',
-        save: true,
-        list: {
-            '中央値フィルタ': 0,
-            '最小値フィルタ': 1,
-            '最大値フィルタ': 2,
-            '最頻値フィルタ': 3,
-            '刈り込み平均値フィルタ': 4,
-            'Winsorized平均値フィルタ': 5,
-            'ミッドレンジフィルタ': 6
-        }
-    });
-    const isRootSumSquire = rpgen3.addInputBool(kernel.foot, {
-        label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
-        save: true
-    });
-    isNonLinear.elm.on('change', () => {
-        if(isNonLinear()) {
-            kernel.html.add(kernel.select).add(kernel.foot).hide();
-            nonLinear.html.show();
-        }
-        else {
-            kernel.html.add(kernel.select).add(kernel.foot).show();
-            nonLinear.html.hide();
-        }
-    }).trigger('change');
-    const selectOutline = rpgen3.addSelect(body, {
-        label: '外周画像の処理',
-        save: true,
-        list: {
-            '外周部分を中心にして対称の位置をコピー': 0,
-            '外周部分の画素値をコピー': 1,
-            '全部黒': 2
-        }
-    });
-    const selectBinarized = rpgen3.addSelect(body, {
-        label: '二値化手法',
-        save: true,
-        list: {
-            '閾値0x80でAND演算(最速)': 0,
-            '適応二値化処理': 1,
-            '大津の二値化処理': 2
-        }
-    });
-    const binarize = new class {
-        constructor(){
-            this.html = $('<div>').appendTo(body);
-        }
-    };
-    // http://whitewell.sakura.ne.jp/OpenCV/py_tutorials/py_imgproc/py_thresholding/py_thresholding.html
-    const selectMethod = rpgen3.addSelect(binarize.html, {
-        label: '適応二値化処理の代表値',
-        save: true,
-        list: {
-            '大津の二値化': -2,
-            '平均値': -1,
-            '中央値': 0,
-            '最小値': 1,
-            '最大値': 2,
-            '最頻値': 3,
-            '刈り込み平均値': 4,
-            'Winsorized平均値': 5,
-            'ミッドレンジ': 6
-        }
-    });
-    const inputBlockSize = rpgen3.addInputNum(binarize.html, {
-        label: '近傍領域のサイズ[n×n]',
+        };
+    })();
+    const makeK = (html, label) => rpgen3.addInputNum(html, {
+        label: `${label}の近傍領域[n×n]`,
         save: true,
         value: 3,
         min: 3,
         max: 23,
         step: 2
     });
-    const inputC = rpgen3.addInputNum(binarize.html, {
-        label: '計算された閾値から引く定数',
-        save: true,
-        value: 11,
-        min: 0,
-        max: 255
+    const linear = new class {
+        constructor(){
+            const html = spatialFilter.linear;
+            this.select = rpgen3.addSelect(html, {
+                label: '線形フィルタ',
+                save: true,
+                list: linearList
+            });
+            this.k = makeK(html, '線形フィルタ');
+            this.kHTML = $('<div>').appendTo(html);
+            this.isTr = rpgen3.addInputBool(html, {
+                label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
+                save: true
+            });
+        }
+    };
+    const nonLinear = new class {
+        constructor(){
+            const html = spatialFilter.nonLinear;
+            this.select = rpgen3.addSelect(html, {
+                label: '非線形フィルタ',
+                save: true,
+                list: {
+                    '中央値': 0,
+                    '最小値': 1,
+                    '最大値': 2,
+                    '最頻値': 3,
+                    '刈り込み平均値': 4,
+                    'Winsorized平均値': 5,
+                    'ミッドレンジ': 6
+                }
+            });
+            this.k = makeK(html, '非線形フィルタ');
+        }
+    };
+    const kernel = new class {
+        constructor(){
+            this.html = $('<table>').appendTo(linear.kHTML);
+            this.k = 0;
+            this.list = [];
+            this.tdMap = new Map;
+            this.valueMap = new Map;
+        }
+        resize(k){
+            const _k = k - this.k >> 1,
+                  list = [];
+            this.html.empty();
+            this.tdMap.clear();
+            this.valueMap.clear();
+            const {toI} = rpgen4;
+            for(const y of Array(k).keys()) {
+                const tr = $('<tr>').appendTo(this.html);
+                for(const x of Array(k).keys()) {
+                    const [_x, _y] = [x, y].map(v => v - _k),
+                          n = _x < 0 || _x >= this.k || _y < 0 || _y >= this.k ? 0 : this.list[toI(this.k, _x, _y)] || 0;
+                    list.push(n);
+                    const i = toI(k, x, y);
+                    const td = $('<td>').appendTo(tr).prop({
+                        contenteditable: true
+                    }).text(n).on('focusout', () => {
+                        this.input(i, rpgen3.toHan(td.text()));
+                    }).addClass(`kernel${Math.max(...[x, y].map(v => v - (k >> 1)).map(Math.abs))}`);
+                    this.tdMap.set(i, td);
+                    this.valueMap.set(i, n);
+                }
+            }
+            this.k = k;
+            this.list = list;
+        }
+        input(i, value){
+            const td = this.tdMap.get(i);
+            try {
+                const n = Number(new Function(`return ${value}`)());
+                if(!Number.isNaN(n)) {
+                    this.list[i] = n;
+                    td.text(value);
+                    this.valueMap.set(i, value);
+                }
+            }
+            catch {}
+            td.text(this.valueMap.get(i));
+        }
+    };
+    linear.k.elm.on('change', () => {
+        kernel.resize(linear.k());
+    }).trigger('change');
+    linear.select.elm.on('change', () => {
+        const k = linear.select();
+        linear.k(Math.sqrt(k.length));
+        linear.k.elm.trigger('change');
+        for(const [i, v] of k.entries()) kernel.input(i, v);
+    }).trigger('change');
+    const isReverse = rpgen3.addInputBool(main, {
+        label: 'ネガポジ反転を行う',
+        save: true
     });
-    $('<div>').appendTo(body).text('処理の流れ');
-    const isDoingMain = rpgen3.addInputBool(body, {
-        label: '空間フィルタリングをする',
-        save: true,
-        value: true
-    });
-    const isDoingReverse = rpgen3.addInputBool(body, {
-        label: '反転する',
-        save: true,
-        value: true
-    });
-    const isDoingBinarize = rpgen3.addInputBool(body, {
-        label: '二値化する',
-        save: true,
-        value: true
-    });
-    addBtn(body, '処理開始', () => start());
+    const binarize = new class {
+        constructor(){
+            this.isOpened = addHideArea('二値化を行う');
+            const html = this.isOpened.html;
+            this.select = rpgen3.addSelect(html, {
+                label: '二値化手法',
+                save: true,
+                list: {
+                    '閾値0x80でAND演算(最速)': 0,
+                    '適応二値化処理': 1,
+                    '大津の二値化処理': 2
+                }
+            });
+            const adaptive = $('<div>').appendTo(html);
+            this.select.elm.on('change', () => {
+                if(this.select() === 1) this.adaptive.show();
+                else this.adaptive.hide();
+            }).trigger('change');
+        }
+    };
+    const adaptive = new class {
+        constructor(){
+            const html = binarize.adaptive;
+            this.select = rpgen3.addSelect(html, {
+                label: '適応二値化処理の代表値',
+                save: true,
+                list: {
+                    '大津の二値化': -2,
+                    '平均値': -1,
+                    '中央値': 0,
+                    '最小値': 1,
+                    '最大値': 2,
+                    '最頻値': 3,
+                    '刈り込み平均値': 4,
+                    'Winsorized平均値': 5,
+                    'ミッドレンジ': 6
+                }
+            });
+            this.k = makeK(html, '適応二値化処理');
+            this.sub = rpgen3.addInputNum(html, {
+                label: '計算された閾値から引く定数',
+                save: true,
+                value: 11,
+                min: 0,
+                max: 255
+            });
+        }
+    };
+    rpgen3.addBtn(main, '処理の開始', () => start());
     const msg = new class {
         constructor(){
-            this.html = $('<div>').appendTo(foot);
+            this.html = $('<div>').appendTo(main);
         }
         async print(str){
             this.html.text(str);
-            await sleep(0);
+            await rpgen3.sleep(0);
         }
     };
     const output = new class {
         constructor(){
-            this.tab = $('<div>').appendTo(foot);
-            this.html = $('<div>').appendTo(foot);
+            this.tab = $('<div>').appendTo(main);
+            this.html = $('<div>').appendTo(main);
             this.list = new Map;
         }
         init(){
@@ -369,12 +421,12 @@
             this.list.clear();
         }
         add({label, data, width, height, k}){
-            const {_k, __k, _width, _height} = calcAny({k, width, height}),
+            const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
                   [cv, ctx] = makeCanvas(width, height);
             ctx.putImageData(new ImageData(this.toOpacity(data), _width, _height), -_k, -_k);
             const html = $('<div>').appendTo(this.html).hide().append(cv);
             this.makeBtnDL(label, cv.get(0).toDataURL()).appendTo(html);
-            const tab = addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
+            const tab = rpgen3.addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
             this.list.set(label, [tab, html]);
         }
         showTab(label){
@@ -403,126 +455,50 @@
     };
     const start = async () => {
         output.init();
-        const {k, list} = kernel,
+        const {k} = kernel,
               {img} = image,
               {width, height} = img,
               [cv, ctx] = makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
-        let data = await makeDataOutlined({ // 外周を埋めた配列
+        let data = rpgen4.makeOutline({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data,
-            width, height, k
+            width, height, k,
+            outline: selectOutline()
         });
         const _output = label => {
             output.add({data, width, height, k, label});
             output.showTab(label);
         };
         _output('入力');
-        if(isDoingMain()) {
-            data = await spatialFilter({data, width, height, k, list: list.slice()});
+        if(spatialFilter.isOpened()) {
+            data = await mainSpatialFilter({k, width, height, data, kernel: kernel.list});
             _output('出力');
         }
-        if(isDoingReverse()) {
-            data = await makeDataReversed(data);
+        if(isReverse()) {
+            data = rpgen4.toReverse(data);
             _output('反転');
         }
-        if(isDoingBinarize()){
-            data = await makeDataBinarized({data, k, width, height});
+        if(binarize.isOpened()){
+            data = await mainBinarize({k, width, height, data});
             _output('二値化');
         }
         await msg.print('全ての処理が完了しました。');
     };
-    const calcAny = ({k, width, height}) => { // 地味に必要な計算
-        const _k = k >> 1, // 端の幅
-              __k = _k << 1, // 両端の幅
-              _width = width + __k, // 外周を埋めた幅
-              _height = height + __k; // 外周を埋めた高さ
-        return {_k, __k, _width, _height};
-    };
-    const makeDataOutlined = async ({data, width, height, k}) => {
-        await msg.print('外周を補完します。');
-        const {_k, __k, _width, _height} = calcAny({k, width, height}),
-              _data = new Uint8ClampedArray(_width * _height << 2);
-        for(const i of Array(width * height).keys()) {
-            const [x, y] = toXY(width, i),
-                  a = i << 2,
-                  b = (x + _k) + (y + _k) * _width << 2;
-            Object.assign(_data.subarray(b, b + 3), data.subarray(a, a + 3));
-        }
-        const outline = selectOutline();
-        if(outline === 2) return _data;
-        const _toI = (x, y) => toI(_width, x, y),
-              _toXY = i => toXY(_k, i);
-        const put = (a, b) => {
-            const _a = a << 2,
-                  _b = b << 2;
-            Object.assign(_data.subarray(_a, _a + 3), _data.subarray(_b, _b + 3));
-        };
-        { // 四隅
-            const w = _k + width,
-                  h = _k + height;
-            for(const [[ax, ay], [bx, by]] of [ // 外周の起点座標, 内周の四隅
-                [[0, 0], [_k, _k]], // 左上
-                [[w, 0], [-1, _k]], // 右上
-                [[0, h], [_k, -1]], // 左下
-                [[w, h], [-1, -1]] // 右下
-            ]) {
-                const len = _k ** 2;
-                for(const i of Array(len).keys()) {
-                    const [x, y] = _toXY(i);
-                    const _i = outline ? _toI(ax + bx, ay + by) : (() => {
-                        const [cx, cy] = [bx, by].map(v => v - _k + 1), // 外周の対称の起点
-                              [x, y] = _toXY(len - i - 1);
-                        return _toI(x + ax + bx + cx, y + ay + by + cy);
-                    })();
-                    put(_toI(x + ax, y + ay), _i);
-                }
-            }
-        }
-        { // 上下
-            const kh = _k + height - 1;
-            for(const x of Array(width).keys()) {
-                const kx = _k + x;
-                for(const a of Array(_k).keys()) {
-                    const a1 = a + 1,
-                          o = outline ? 0 : a1;
-                    put(_toI(kx, _k - a1), _toI(kx, _k + o));
-                    put(_toI(kx, kh + a1), _toI(kx, kh - o));
-                }
-            }
-        }
-        { // 左右
-            const kw = _k + width - 1;
-            for(const y of Array(height).keys()) {
-                const ky = _k + y;
-                for(const a of Array(_k).keys()) {
-                    const a1 = a + 1,
-                          o = outline ? 0 : a1;
-                    put(_toI(_k - a1, ky), _toI(_k + o, ky));
-                    put(_toI(kw + a1, ky), _toI(kw - o, ky));
-                }
-            }
-        }
-        return _data;
-    };
-    const luminance = (r, g, b) => r * 0.298912 + g * 0.586611 + b * 0.114478;
-    const makeDataLuminance = async data => {
-        await msg.print('輝度を取得します。');
-        const _data = new Uint8ClampedArray(data.length >> 2);
-        for(const i of _data.keys()) {
-            const _i = i << 2;
-            _data[i] = luminance(...data.subarray(_i, _i + 3));
-        }
-        return _data;
-    };
-    const spatialFilter = async ({width, height, k, data, list}) => {
-        const {_k, __k, _width, _height} = calcAny({k, width, height});
-        const _data = data.slice(),
-              indexs = list.slice(), // 注目する画素及びその近傍の座標
-              sum = [...Array(3).fill(0)]; // 積和の計算結果を格納するためのRGB配列
+    const mainSpatialFilter = async ({k, width, height, data, kernel}) => {
+        const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height});
+        const sum = [...Array(3).fill(0)]; // 積和の計算結果を格納するためのRGB配列
         const func = await (async () => {
-            if(isNonLinear()) {
+            if(spatialFilter.select()) {
+                if(linear.isTr()) {
+                    const _kernel = rpgen4.toTransposed(kernel),
+                          _sum = sum.slice();
+                    return ({...arg}) => rpgen4.linear2({...arg, _kernel, _sum});
+                }
+                else return ({...arg}) => rpgen4.linear({...arg});
+            }
+            else {
                 const func = (() => {
-                    switch(selectNonLinear()) {
+                    switch(nonLinear.select()) {
                         case 0: return a => rpgen3.median(a);
                         case 1: return a => Math.min(...a);
                         case 2: return a => Math.max(...a);
@@ -532,84 +508,36 @@
                         case 6: return a => rpgen3.midrange(a);
                     }
                 })();
-                const lums = await makeDataLuminance(data),
-                      arr = list.slice(); // 輝度値を格納する配列
-                return ({...arg}) => processNonLinear({...arg, func, lums, arr});
-            }
-            else {
-                if(isRootSumSquire()) {
-                    const _list = toTransposed(list),
-                          _sum = sum.slice();
-                    return ({...arg}) => processLinear2({...arg, _list, _sum});
-                }
-                else return ({...arg}) => processLinear({...arg});
+                const luminance = rpgen4.makeLuminance(data);
+                return ({...arg}) => rpgen4.nonLinear({...arg, luminance, func});
             }
         })();
-        const len = width * height;
+        const {toI, toXY} = rpgen4;
+        const _data = data.slice(),
+              index = kernel.slice(), // 注目する画素及びその近傍の座標
+              len = width * height;
         let cnt = 0;
         for(const i of Array(len).keys()) { // 元画像の範囲のみ走査する
             if(!(++cnt % 1000)) await msg.print(`空間フィルタリング(${i}/${len})`);
             const [x, y] = toXY(width, i);
-            for(const i of list.keys()) { // 座標ゲットだぜ！
+            for(const i of index.keys()) { // 座標ゲットだぜ！
                 const [_x, _y] = toXY(k, i);
-                indexs[i] = toI(_width, x + _x, y + _y) << 2;
+                index[i] = toI(_width, x + _x, y + _y) << 2;
             }
-            sum.fill(0); // 0で初期化
-            func({data, list, indexs, sum});
             const _i = toI(_width, x + _k, y + _k) << 2;
-            Object.assign(_data.subarray(_i, _i + 3), sum);
+            Object.assign(_data.subarray(_i, _i + 3), func({data, index, kernel, sum}));
         }
         return _data;
     };
-    const processLinear = ({data, list, indexs, sum}) => {
-        for(const [i, v] of indexs.entries()) {
-            const rgb = data.subarray(v, v + 3),
-                  k = list[i];
-            for(let i = 0; i < 3; i++) sum[i] += rgb[i] * k;
-        }
-    };
-    const processLinear2 = ({data, list, indexs, sum, _list, _sum}) => {
-        _sum.fill(0);
-        for(const [i, v] of indexs.entries()) {
-            const rgb = data.subarray(v, v + 3),
-                  k = list[i],
-                  _k = _list[i];
-            for(let i = 0; i < 3; i++) {
-                const v = rgb[i];
-                sum[i] += v * k;
-                _sum[i] += v * _k;
-            }
-        }
-        for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
-    };
-    const processNonLinear = ({data, list, indexs, sum, func, lums, arr}) => {
-        const m = new Map;
-        for(const [i, v] of indexs.entries()) {
-            const lum = lums[v >> 2];
-            m.set(lum, v);
-            arr[i] = lum;
-        }
-        const i = m.get(func(arr));
-        Object.assign(sum, data.subarray(i, i + 3));
-    };
-    const makeDataReversed = async data => {
-        await msg.print('出力を反転します。');
-        const _data = data.slice();
-        for(const i of Array(data.length >> 2).keys()) {
-            const _i = i << 2;
-            Object.assign(_data.subarray(_i, _i + 3), data.subarray(_i, _i + 3).map(v => 255 - v));
-        }
-        return _data;
-    };
-    const makeDataBinarized = async ({data, k, width, height}) => {
+    const mainBinarize = async ({k, width, height, data}) => {
         await msg.print('反転を二値化します。');
-        const {_k, __k, _width, _height} = calcAny({k, width, height}),
-              lums = await makeDataLuminance(data);
+        const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
+              lums = rpgen4.makeLuminance(data);
         const _lums = await (async () => {
-            switch(selectBinarized()) {
-                case 0: return binarizeAND(lums);
-                case 1: return binarizeAdaptive({lums, width, height, _width, _k, k});
-                case 2: return binarizeOtsu(lums);
+            switch(binarize.select()) {
+                case 0: return rpgen4.binarizeAND(lums);
+                case 1: return mainAdaptive({lums, width, height, _width, _k, k});
+                case 2: return mainOtsu(lums);
             }
         })();
         const _data = data.slice();
@@ -619,18 +547,14 @@
         }
         return _data;
     };
-    const binarizeAND = lums => {
-        for(const i of Array(lums.length).keys()) lums[i] &= 0x80;
-        return lums;
-    };
-    const binarizeAdaptive = async ({lums, width, height, _width, _k, k}) => {
+    const mainAdaptive = async ({lums, width, height, _width, _k, k}) => {
         const _lums = lums.slice(),
-              w = inputBlockSize(),
+              w = k,
               _w = w >> 1,
               arr = [...Array(w ** 2).keys()],
               len = width * height;
         const func = (() => {
-            switch(selectMethod()){
+            switch(adaptive.select()){
                 case -2: return a => rpgen4.otsu(a);
                 case -1: return a => rpgen3.mean(a);
                 case 0: return a => rpgen3.median(a);
@@ -642,7 +566,8 @@
                 case 6: return a => rpgen3.midrange(a);
             }
         })();
-        const sub = inputC();
+        const {toI, toXY} = rpgen4;
+        const {sub} = adaptive;
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
@@ -656,9 +581,8 @@
         }
         return _lums;
     };
-    const rpgen4 = await import('https://rpgen3.github.io/spatialFilter/mjs/binarize.mjs');
-    const binarizeOtsu = lums => {
-        const t = rpgen4.otsu(lums);
+    const mainOtsu = lums => {
+        const t = rpgen4.binarizeOtsu(lums);
         for(const [i, v] of lums.entries()) lums[i] = v > t | 0; // 算出した閾値で二値化処理
         return lums;
     };
