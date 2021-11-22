@@ -151,6 +151,7 @@
                 list: rpgen4.kernel
             });
             this.kernel = $('<table>').appendTo(html);
+            $('<dt>').appendTo(html).text('オプション');
             this.isTr = rpgen3.addInputBool(html, {
                 label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
                 save: true
