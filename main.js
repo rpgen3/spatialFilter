@@ -243,18 +243,19 @@
     const nonLinear = new class {
         constructor(){
             const html = spatialFilter.nonLinear;
+            this.list = {
+                '中央値': 0,
+                '最小値': 1,
+                '最大値': 2,
+                '最頻値': 3,
+                '刈り込み平均値': 4,
+                'Winsorized平均値': 5,
+                'ミッドレンジ': 6
+            };
             this.select = rpgen3.addSelect(html, {
                 label: '非線形フィルタ',
                 save: true,
-                list: {
-                    '中央値': 0,
-                    '最小値': 1,
-                    '最大値': 2,
-                    '最頻値': 3,
-                    '刈り込み平均値': 4,
-                    'Winsorized平均値': 5,
-                    'ミッドレンジ': 6
-                }
+                list: this.list
             });
         }
     };
@@ -348,13 +349,7 @@
                 list: {
                     '大津の二値化': -2,
                     '平均値': -1,
-                    '中央値': 0,
-                    '最小値': 1,
-                    '最大値': 2,
-                    '最頻値': 3,
-                    '刈り込み平均値': 4,
-                    'Winsorized平均値': 5,
-                    'ミッドレンジ': 6
+                    ...nonLinear.list
                 }
             });
             this.sub = rpgen3.addInputNum(html, {
@@ -519,7 +514,7 @@
               len = width * height;
         const func = (() => {
             switch(adaptive.select()){
-                case -2: return a => rpgen4.otsu(a);
+                case -2: return a => rpgen4.binarizeOtsu(a);
                 case -1: return a => rpgen3.mean(a);
                 case 0: return a => rpgen3.median(a);
                 case 1: return a => Math.min(...a);
