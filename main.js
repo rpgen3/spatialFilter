@@ -469,7 +469,7 @@ dl,dt,dd {
         };
         _output('入力');
         if(spatialFilter.isOpened()) {
-            data = await mainSpatialFilter({k, width, height, data, kernel: kernel.list});
+            data = await mainSpatialFilter({k, width, height, data, kernel: kernel.list.slice()});
             _output('出力');
         }
         if(isReverse()) {
