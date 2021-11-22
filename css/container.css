@@ -1,0 +1,38 @@
+.container {
+	border: 4px solid;
+	border-radius: 8px;
+}
+
+dl,
+dt,
+dd {
+	margin: 0;
+	padding: 0;
+}
+
+dl {
+	display: flex;
+	flex-wrap: wrap;
+	margin: 20px;
+	background-color: #FFF;
+	border-top: 1px solid #DDD;
+	border-left: 1px solid #DDD;
+}
+
+dl dt {
+	background-color: #EEE;
+	font-weight: bold;
+}
+
+dl dt,
+dl dd {
+	width: 50%;
+	padding: 15px;
+	box-sizing: border-box;
+	border-right: 1px solid #DDD;
+	border-bottom: 1px solid #DDD;
+}
+
+dl dd input[placeholder] {
+	width: 80%;
+}
