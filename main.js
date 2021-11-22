@@ -29,43 +29,12 @@
         'util'
     ].map(v => `https://rpgen3.github.io/spatialFilter/mjs/${v}.mjs`));
     Promise.all([
+        'container',
         'table',
         'kernel',
         'tab',
         'img'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
-    $('<style>').appendTo(html).html(`
-    .container {
-    border: 4px solid;
-    border-radius: 8px;
-    }
-dl,dt,dd {
-  margin: 0;
-  padding: 0;
-}
-    dl {
-    display: flex;
-    flex-wrap: wrap;
-    margin: 20px;
-    background-color: #FFF;
-  border-top: 1px solid #DDD;
-  border-left: 1px solid #DDD;
-    }
-    dl dt {
-    background-color: #EEE;
-  font-weight: bold;
-    }
-    dl dt, dl dd {
-    width: 50%;
-    padding: 15px;
-  box-sizing: border-box;
-  border-right:  1px solid #DDD;
-  border-bottom: 1px solid #DDD;
-    }
-    dl dd input {
-    width: 80%;
-    }
-    `);
     $('<h2>').appendTo(head).text('処理する画像の設定');
     const image = new class {
         constructor(){
@@ -131,15 +100,15 @@ dl,dt,dd {
         max: 23,
         step: 2
     });
+    const hideTime = 500;
     const addHideArea = (label, parentNode = main) => {
         const html = $('<div>').addClass('container').appendTo(parentNode);
         const input = rpgen3.addInputBool(html, {
             label,
             save: true
         });
-        const area = $('<div>').appendTo(html);
-        const time = 500;
-        input.elm.on('change', () => input() ? area.show(time) : area.hide(time)).trigger('change');
+        const area = $('<dl>').appendTo(html);
+        input.elm.on('change', () => input() ? area.show(hideTime) : area.hide(hideTime)).trigger('change');
         return Object.assign(input, {
             get html(){
                 return area;
@@ -158,16 +127,16 @@ dl,dt,dd {
                     '非線形': false
                 }
             });
-            this.linear = $('<div>').appendTo(html);
-            this.nonLinear = $('<div>').appendTo(html);
+            this.linear = $('<dl>').appendTo(html);
+            this.nonLinear = $('<dl>').appendTo(html);
             this.select.elm.on('change', () => {
                 if(this.select()) {
-                    this.linear.show();
-                    this.nonLinear.hide();
+                    this.nonLinear.hide(hideTime);
+                    this.linear.show(hideTime);
                 }
                 else {
-                    this.linear.hide();
-                    this.nonLinear.show();
+                    this.linear.hide(hideTime);
+                    this.nonLinear.show(hideTime);
                 }
             }).trigger('change');
         }
@@ -264,7 +233,7 @@ dl,dt,dd {
                 save: true,
                 list: linearList
             });
-            this.kernel = $('<div>').appendTo(html);
+            this.kernel = $('<table>').appendTo(html);
             this.isTr = rpgen3.addInputBool(html, {
                 label: 'カーネルの転置行列の畳み込み積分と二乗和平方根をとる(向きがあるフィルタに有効)',
                 save: true
@@ -291,7 +260,7 @@ dl,dt,dd {
     };
     const kernel = new class {
         constructor(){
-            this.html = $('<table>').appendTo(linear.kernel);
+            this.html = linear.kernel;
             this.k = 0;
             this.list = [];
             this.tdMap = new Map;
@@ -342,8 +311,8 @@ dl,dt,dd {
     }).trigger('change');
     linear.select.elm.on('change', () => {
         const k = linear.select();
-        linear.k(Math.sqrt(k.length));
-        linear.k.elm.trigger('change');
+        inputKernelSize(Math.sqrt(k.length));
+        inputKernelSize.elm.trigger('change');
         for(const [i, v] of k.entries()) kernel.input(i, v);
     }).trigger('change');
     const isReverse = rpgen3.addInputBool(main, {
@@ -363,10 +332,10 @@ dl,dt,dd {
                     '大津の二値化処理': 2
                 }
             });
-            const adaptive = $('<div>').appendTo(html);
+            this.adaptive = $('<dl>').appendTo(html);
             this.select.elm.on('change', () => {
-                if(this.select() === 1) this.adaptive.show();
-                else this.adaptive.hide();
+                if(this.select() === 1) this.adaptive.show(hideTime);
+                else this.adaptive.hide(hideTime);
             }).trigger('change');
         }
     };
@@ -388,7 +357,6 @@ dl,dt,dd {
                     'ミッドレンジ': 6
                 }
             });
-            this.k = makeK(html, '適応二値化処理');
             this.sub = rpgen3.addInputNum(html, {
                 label: '計算された閾値から引く定数',
                 save: true,
