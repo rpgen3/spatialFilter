@@ -107,7 +107,8 @@
         const html = $('<div>').addClass('container').appendTo(parentNode);
         const input = rpgen3.addInputBool(html, {
             label,
-            save: true
+            save: true,
+            value: true
         });
         const area = $('<dl>').appendTo(html);
         input.elm.on('change', () => input() ? area.show(hideTime) : area.hide(hideTime)).trigger('change');
