@@ -26,6 +26,7 @@
         'main',
         'makeLuminance',
         'makeOutline',
+        'toOpacity',
         'toReverse',
         'util'
     ].map(v => `https://rpgen3.github.io/spatialFilter/mjs/${v}.mjs`));
@@ -301,8 +302,8 @@
         }
         add({label, data, width, height, k}){
             const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
-                  [cv, ctx] = makeCanvas(width, height);
-            ctx.putImageData(new ImageData(this.toOpacity(data), _width, _height), -_k, -_k);
+                  [cv, ctx] = rpgen3.makeCanvas(width, height);
+            ctx.putImageData(new ImageData(rpgen4.toOpacity(data), _width, _height), -_k, -_k);
             const html = $('<div>').appendTo(this.html).hide().append(cv);
             this.makeBtnDL(label, cv.get(0).toDataURL()).appendTo(html);
             const tab = rpgen3.addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
@@ -322,22 +323,13 @@
                 })
             );
         }
-        toOpacity(data){
-            for(let i = 3; i < data.length; i += 4) data[i] = 255;
-            return data;
-        }
-    };
-    const makeCanvas = (width, height) => {
-        const cv = $('<canvas>').prop({width, height}),
-              ctx = cv.get(0).getContext('2d');
-        return [cv, ctx];
     };
     const start = async () => {
         output.init();
         const {k} = kernel,
               {img} = image,
               {width, height} = img,
-              [cv, ctx] = makeCanvas(width, height);
+              [cv, ctx] = rpgen3.makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
         let data = rpgen4.makeOutline({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data,
