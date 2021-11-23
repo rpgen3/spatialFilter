@@ -305,7 +305,7 @@
                   [cv, ctx] = rpgen3.makeCanvas(width, height);
             ctx.putImageData(new ImageData(rpgen4.toOpacity(data), _width, _height), -_k, -_k);
             const html = $('<div>').appendTo(this.html).hide().append(cv);
-            this.makeBtnDL(label, cv.get(0).toDataURL()).appendTo(html);
+            this.makeBtnDL(label, cv.toDataURL()).appendTo(html);
             const tab = rpgen3.addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
             this.list.set(label, [tab, html]);
         }
