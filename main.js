@@ -281,7 +281,13 @@
             });
         }
     };
-    rpgen3.addBtn(main, '処理の開始', () => start());
+    let started = false;
+    rpgen3.addBtn(main, '処理の開始', async () => {
+        if(started) return;
+        started = true;
+        await start();
+        started = false;
+    });
     const msg = new class {
         constructor(){
             this.html = $('<div>').appendTo(main);
