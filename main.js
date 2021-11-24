@@ -27,8 +27,7 @@
         'makeLuminance',
         'makeOutline',
         'toOpacity',
-        'toReverse',
-        'util'
+        'toReverse'
     ].map(v => `https://rpgen3.github.io/spatialFilter/mjs/${v}.mjs`));
     Promise.all([
         'container',
