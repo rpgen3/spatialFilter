@@ -336,7 +336,8 @@
         output.init();
         const {k} = kernel,
               {img} = image,
-              {width, height} = img,
+              width = img.naturalWidth,
+              height = img.naturalHeight,
               [cv, ctx] = rpgen3.makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
         let data = rpgen4.makeOutline({ // 外周を埋めた配列
