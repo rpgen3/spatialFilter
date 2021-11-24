@@ -1,7 +1,7 @@
 (async () => {
     const {importAll, getScript, importAllSettled} = await import(`https://rpgen3.github.io/mylib/export/import.mjs`);
     await getScript('https://code.jquery.com/jquery-3.3.1.min.js');
-    const $ = window.$;
+    const {$} = window;
     const html = $('body').empty().css({
         'text-align': 'center',
         padding: '1em',
