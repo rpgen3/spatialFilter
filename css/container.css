@@ -36,9 +36,9 @@ dl dd {
 
 input,
 select {
-	max-width: 90%;
+	max-width: 100%;
 }
 
 dl dd input[placeholder] {
-	width: 90%;
+	width: 100%;
 }
