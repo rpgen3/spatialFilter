@@ -34,8 +34,7 @@ dl dd {
 	border-bottom: 1px solid #DDD;
 }
 
-dl dd input[placeholder],
-dl dd input[type='file'],
+input,
 select {
-	width: 80%;
+	max-width: 90%;
 }
