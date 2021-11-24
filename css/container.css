@@ -38,3 +38,7 @@ input,
 select {
 	max-width: 90%;
 }
+
+dl dd input[placeholder] {
+	width: 90%;
+}
