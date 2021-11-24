@@ -238,7 +238,8 @@
     }).trigger('change');
     const isReverse = rpgen3.addInputBool(main, {
         label: 'ネガポジ反転を行う',
-        save: true
+        save: true,
+        value: true
     });
     const binarize = new class {
         constructor(){
