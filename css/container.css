@@ -20,6 +20,10 @@ dl {
 	width: auto;
 }
 
+dl dl {
+	width: 100%;
+}
+
 dl dt {
 	background-color: #EEE;
 	font-weight: bold;
