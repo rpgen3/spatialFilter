@@ -13,17 +13,17 @@ export const toTransposed = arr => {
     }
     return _arr;
 };
-const kernelPrewitt = [
+const Prewitt = [
     -1, 0, 1,
     -1, 0, 1,
     -1, 0, 1
 ];
-const kernelSobel = [
+const Sobel = [
     -1, 0, 1,
     -2, 0, 2,
     -1, 0, 1
 ];
-const kernelSobel5 = [
+const Sobel5 = [
     -1, -2, 0, 2, 1,
     -4, -8, 0, 8, 4,
     -6, -12, 0,12, 6,
@@ -65,12 +65,12 @@ export const kernel = {
         0, 0, 1,
         0, -1, 0
     ],
-    'Prewitt x': kernelPrewitt,
-    'Prewitt y': toTransposed(kernelPrewitt),
-    'Sobel x': kernelSobel,
-    'Sobel y': toTransposed(kernelSobel),
-    'Sobel x 5x5': kernelSobel5,
-    'Sobel y 5x5': toTransposed(kernelSobel5),
+    'Prewitt x': Prewitt,
+    'Prewitt y': toTransposed(Prewitt),
+    'Sobel x': Sobel,
+    'Sobel y': toTransposed(Sobel),
+    'Sobel x 5x5': Sobel5,
+    'Sobel y 5x5': toTransposed(Sobel5),
     'Laplacian 4': [
         0, 1, 0,
         1, -4, 1,
