@@ -43,11 +43,10 @@
             $('<h3>').appendTo(html).text('選べる３種類の入力方法');
             this.input = $('<dl>').appendTo(html);
             this.output = $('<div>').appendTo(html);
-            this._load = rpgen3.makeLoader(Image);
             this.img = null;
         }
         async load(url){
-            $(this.img = await this._load(url)).appendTo(this.output.empty());
+            $(this.img = await rpgen3.loadSrc('img', url)).appendTo(this.output.empty());
         }
     };
     { // 画像入力
