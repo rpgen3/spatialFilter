@@ -1,4 +1,11 @@
-import {toI, toXY, calcAny} from 'https://rpgen3.github.io/spatialFilter/mjs/util.mjs';
+import {toI, toXY} from 'https://rpgen3.github.io/spatialFilter/mjs/kernel.mjs';
+export const calcAny = ({k, width, height}) => { // 地味に必要な計算
+    const _k = k >> 1, // 端の幅
+          __k = _k << 1, // 両端の幅
+          _width = width + __k, // 外周を埋めた幅
+          _height = height + __k; // 外周を埋めた高さ
+    return {_k, __k, _width, _height};
+};
 export const makeOutline = ({data, width, height, k, outline = 0}) => {
     const {_k, __k, _width, _height} = calcAny({k, width, height}),
           _data = new Uint8ClampedArray(_width * _height << 2);
