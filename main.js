@@ -308,7 +308,7 @@
         }
         add({label, data, width, height, k}){
             const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
-                  [cv, ctx] = rpgen3.makeCanvas(width, height);
+                  {cv, ctx} = rpgen3.makeCanvas(width, height);
             ctx.putImageData(new ImageData(rpgen4.toOpacity(data), _width, _height), -_k, -_k);
             const html = $('<div>').appendTo(this.html).hide().append(cv);
             this.makeBtnDL(label, cv.toDataURL()).appendTo(html);
@@ -336,7 +336,7 @@
               {img} = image,
               width = img.naturalWidth,
               height = img.naturalHeight,
-              [cv, ctx] = rpgen3.makeCanvas(width, height);
+              {ctx} = rpgen3.makeCanvas(width, height);
         ctx.drawImage(img, 0, 0);
         let data = rpgen4.makeOutline({ // 外周を埋めた配列
             data: ctx.getImageData(0, 0, width, height).data,
