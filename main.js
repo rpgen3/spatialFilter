@@ -36,10 +36,10 @@
         'tab',
         'img'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
-    $('<h2>').appendTo(head).text('処理する画像の設定');
+    $('<h2>').appendTo(main).text('処理する画像の設定');
     const image = new class {
         constructor(){
-            const html = $('<div>').appendTo(head).addClass('container');
+            const html = $('<div>').appendTo(main).addClass('container');
             $('<h3>').appendTo(html).text('選べる３種類の入力方法');
             this.input = $('<dl>').appendTo(html);
             this.output = $('<div>').appendTo(html);
