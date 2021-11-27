@@ -35,7 +35,7 @@
         'kernel',
         'tab',
         'img',
-        'btn'
+        'button'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     $('<h2>').appendTo(main).text('処理する画像の設定');
     const image = new class {
