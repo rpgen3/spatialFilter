@@ -35,7 +35,7 @@
         'kernel',
         'tab',
         'img',
-        'button'
+        'btn'
     ].map(v => `css/${v}.css`).map(rpgen3.addCSS));
     $('<h2>').appendTo(main).text('処理する画像の設定');
     const image = new class {
@@ -287,7 +287,7 @@
         started = true;
         await start();
         started = false;
-    });
+    }).addClass('btn');
     const msg = new class {
         constructor(){
             this.html = $('<div>').appendTo(main);
@@ -312,7 +312,7 @@
                   {cv, ctx} = rpgen3.makeCanvas(width, height);
             ctx.putImageData(new ImageData(rpgen4.toOpacity(data), _width, _height), -_k, -_k);
             const html = $('<div>').appendTo(this.html).hide().append(cv);
-            this.makeBtnDL(label, cv.toDataURL()).appendTo(html);
+            this.addBtnDL(html, label, cv.toDataURL());
             const tab = rpgen3.addBtn(this.tab, label, () => this.showTab(label)).addClass('tab');
             this.list.set(label, [tab, html]);
         }
@@ -323,12 +323,11 @@
             tab.addClass('tab-selected');
             html.show();
         }
-        makeBtnDL(label, href){
-            return $('<div>').append(
-                $('<button>').text('保存').on('click', () => {
-                    $('<a>').attr({href, download: `${label}.png`}).get(0).click();
-                })
-            );
+        addBtnDL(html, ttl, url){
+            const h = $('<div>').appendTo(html);
+            rpgen3.addBtn(h, '画像の保存', () => {
+                rpgen3.download(url, `${ttl}.png`);
+            }).addClass('btn');
         }
     };
     const start = async () => {
