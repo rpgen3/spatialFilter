@@ -415,7 +415,7 @@
         await msg.print('反転を二値化します。');
         const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
               lums = rpgen4.makeLuminance(data);
-        const _lums = [
+        const _lums = await [
             () => rpgen4.binarizeAND(lums),
             () => mainAdaptive({lums, width, height, _width, k, _k}),
             () => mainOtsu(lums)
