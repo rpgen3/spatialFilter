@@ -159,41 +159,28 @@
             });
         }
     };
-    const sample = new class {
-        constructor(){
-            this.key = [
-                '大津の二値化',
-                '平均値',
-                '中央値',
-                '最小値',
-                '最大値',
-                '最頻値',
-                '刈り込み平均値',
-                'Winsorized平均値',
-                'ミッドレンジ'
-            ];
-            this.value = [
-                a => rpgen4.binarizeOtsu(a),
-                a => rpgen3.mean(a),
-                a => rpgen3.median(a),
-                a => Math.min(...a),
-                a => Math.max(...a),
-                a => rpgen3.mode(a),
-                a => rpgen3.meanTrim(a),
-                a => rpgen3.meanTrim(a, 0.1, true),
-                a => rpgen3.midrange(a)
-            ];
-            this.keys = this.key.map((v, i) => [v, i]);
-        }
-    };
+    const sample = new Map([
+        ['大津の二値化', rpgen4.binarizeOtsu],
+        ['平均値', rpgen3.mean],
+        ['中央値', rpgen3.median],
+        ['最小値', a => Math.min(...a)],
+        ['最大値', a => Math.max(...a)],
+        ['最頻値', rpgen3.mode],
+        ['刈り込み平均値', rpgen3.meanTrim],
+        ['Winsorized平均値', a => rpgen3.meanTrim(a, 0.1, true)],
+        ['ミッドレンジ', rpgen3.midrange]
+    ]);
     const nonLinear = new class {
         constructor(){
             const html = spatialFilter.nonLinear;
             this.select = rpgen3.addSelect(html, {
                 label: '非線形フィルタ',
                 save: true,
-                list: sample.keys.slice(2)
+                list: [...sample.keys()].slice(2)
             });
+        }
+        get func(){
+            return sample.get(this.select());
         }
     };
     const kernel = new class {
@@ -262,20 +249,24 @@
         constructor(){
             this.isOpened = addHideArea('二値化を行う');
             const html = this.isOpened.html;
+            this.m = new Map([
+                ['閾値0x80でAND演算(最速)', ({lums}) => rpgen4.binarizeAND(lums)],
+                ['適応二値化処理', (...a) => mainAdaptive(...a)],
+                ['大津の二値化処理', ({lums}) => mainOtsu(lums)]
+            ]);
             this.select = rpgen3.addSelect(html, {
                 label: '二値化手法',
                 save: true,
-                list: {
-                    '閾値0x80でAND演算(最速)': 0,
-                    '適応二値化処理': 1,
-                    '大津の二値化処理': 2
-                }
+                list: this.m.keys()
             });
             this.adaptive = $('<dl>').appendTo(html);
             this.select.elm.on('change', () => {
                 if(this.select() === 1) this.adaptive.show(hideTime);
                 else this.adaptive.hide(hideTime);
             }).trigger('change');
+        }
+        get func(){
+            return this.m.get(this.select());
         }
     };
     const adaptive = new class {
@@ -284,7 +275,7 @@
             this.select = rpgen3.addSelect(html, {
                 label: '適応二値化処理の代表値',
                 save: true,
-                list: sample.keys
+                list: sample.keys()
             });
             this.sub = rpgen3.addInputNum(html, {
                 label: '計算された閾値から引く定数',
@@ -293,6 +284,9 @@
                 min: 0,
                 max: 255
             });
+        }
+        get func(){
+            return sample.get(this.select());
         }
     };
     let started = false;
@@ -389,7 +383,7 @@
                 else return ({...arg}) => rpgen4.linear({...arg});
             }
             else {
-                const func = sample.value[nonLinear.select()],
+                const {func} = nonLinear,
                       luminance = rpgen4.makeLuminance(data);
                 return ({...arg}) => rpgen4.nonLinear({...arg, luminance, func});
             }
@@ -414,13 +408,9 @@
     const mainBinarize = async ({k, width, height, data}) => {
         await msg.print('反転を二値化します。');
         const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
-              lums = rpgen4.makeLuminance(data);
-        const _lums = await [
-            () => rpgen4.binarizeAND(lums),
-            () => mainAdaptive({lums, width, height, _width, k, _k}),
-            () => mainOtsu(lums)
-        ][binarize.select()]();
-        const _data = data.slice();
+              lums = rpgen4.makeLuminance(data),
+              _lums = await binarize.func({lums, width, height, _width, k, _k}),
+              _data = data.slice();
         for(const [i, v] of _lums.entries()) {
             const _i = i << 2;
             _data[_i] = _data[_i + 1] = _data[_i + 2] = v ? 255 : 0;
@@ -431,9 +421,8 @@
         const _lums = lums.slice(),
               arr = [...Array(k ** 2).keys()],
               len = width * height,
-              func = sample.value[adaptive.select()],
-              {toI, toXY} = rpgen4,
-              {sub} = adaptive;
+              {func, sub} = adaptive,
+              {toI, toXY} = rpgen4;
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
