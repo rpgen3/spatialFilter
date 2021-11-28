@@ -159,22 +159,40 @@
             });
         }
     };
+    const sample = new class {
+        constructor(){
+            this.key = [
+                '大津の二値化',
+                '平均値',
+                '中央値',
+                '最小値',
+                '最大値',
+                '最頻値',
+                '刈り込み平均値',
+                'Winsorized平均値',
+                'ミッドレンジ'
+            ];
+            this.value = [
+                a => rpgen4.binarizeOtsu(a),
+                a => rpgen3.mean(a),
+                a => rpgen3.median(a),
+                a => Math.min(...a),
+                a => Math.max(...a),
+                a => rpgen3.mode(a),
+                a => rpgen3.meanTrim(a),
+                a => rpgen3.meanTrim(a, 0.1, true),
+                a => rpgen3.midrange(a)
+            ];
+            this.keys = this.key.map((v, i) => [v, i]);
+        }
+    };
     const nonLinear = new class {
         constructor(){
             const html = spatialFilter.nonLinear;
-            this.list = {
-                '中央値': 0,
-                '最小値': 1,
-                '最大値': 2,
-                '最頻値': 3,
-                '刈り込み平均値': 4,
-                'Winsorized平均値': 5,
-                'ミッドレンジ': 6
-            };
             this.select = rpgen3.addSelect(html, {
                 label: '非線形フィルタ',
                 save: true,
-                list: this.list
+                list: sample.keys.slice(2)
             });
         }
     };
@@ -266,11 +284,7 @@
             this.select = rpgen3.addSelect(html, {
                 label: '適応二値化処理の代表値',
                 save: true,
-                list: {
-                    '大津の二値化': -2,
-                    '平均値': -1,
-                    ...nonLinear.list
-                }
+                list: sample.keys
             });
             this.sub = rpgen3.addInputNum(html, {
                 label: '計算された閾値から引く定数',
@@ -375,18 +389,8 @@
                 else return ({...arg}) => rpgen4.linear({...arg});
             }
             else {
-                const func = (() => {
-                    switch(nonLinear.select()) {
-                        case 0: return a => rpgen3.median(a);
-                        case 1: return a => Math.min(...a);
-                        case 2: return a => Math.max(...a);
-                        case 3: return a => rpgen3.mode(a);
-                        case 4: return a => rpgen3.meanTrim(a);
-                        case 5: return a => rpgen3.meanTrim(a, 0.1, true);
-                        case 6: return a => rpgen3.midrange(a);
-                    }
-                })();
-                const luminance = rpgen4.makeLuminance(data);
+                const func = sample.value[nonLinear.select()],
+                      luminance = rpgen4.makeLuminance(data);
                 return ({...arg}) => rpgen4.nonLinear({...arg, luminance, func});
             }
         })();
@@ -411,13 +415,11 @@
         await msg.print('反転を二値化します。');
         const {_k, __k, _width, _height} = rpgen4.calcAny({k, width, height}),
               lums = rpgen4.makeLuminance(data);
-        const _lums = await (async () => {
-            switch(binarize.select()) {
-                case 0: return rpgen4.binarizeAND(lums);
-                case 1: return mainAdaptive({lums, width, height, _width, k, _k});
-                case 2: return mainOtsu(lums);
-            }
-        })();
+        const _lums = [
+            () => rpgen4.binarizeAND(lums),
+            () => mainAdaptive({lums, width, height, _width, k, _k}),
+            () => mainOtsu(lums)
+        ][binarize.select()]();
         const _data = data.slice();
         for(const [i, v] of _lums.entries()) {
             const _i = i << 2;
@@ -428,22 +430,10 @@
     const mainAdaptive = async ({lums, width, height, _width, k, _k}) => {
         const _lums = lums.slice(),
               arr = [...Array(k ** 2).keys()],
-              len = width * height;
-        const func = (() => {
-            switch(adaptive.select()){
-                case -2: return a => rpgen4.binarizeOtsu(a);
-                case -1: return a => rpgen3.mean(a);
-                case 0: return a => rpgen3.median(a);
-                case 1: return a => Math.min(...a);
-                case 2: return a => Math.max(...a);
-                case 3: return a => rpgen3.mode(a);
-                case 4: return a => rpgen3.meanTrim(a);
-                case 5: return a => rpgen3.meanTrim(a, 0.1, true);
-                case 6: return a => rpgen3.midrange(a);
-            }
-        })();
-        const {toI, toXY} = rpgen4;
-        const {sub} = adaptive;
+              len = width * height,
+              func = sample.value[adaptive.select()],
+              {toI, toXY} = rpgen4,
+              {sub} = adaptive;
         let cnt = 0;
         for(const i of Array(len).keys()) {
             if(!(++cnt % 1000)) await msg.print(`適応二値化処理(${i}/${len})`);
