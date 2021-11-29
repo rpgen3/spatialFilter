@@ -20,7 +20,7 @@ export const linear2 = ({data, index, kernel, sum, _kernel, _sum}) => {
             _sum[i] += v * _k;
         }
     }
-    for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2);
+    for(let i = 0; i < 3; i++) sum[i] = Math.sqrt(sum[i] ** 2 + _sum[i] ** 2) * Math.SQRT1_2;
     return sum;
 };
 export const nonLinear = ({data, index, kernel, sum, luminance, func}) => {
