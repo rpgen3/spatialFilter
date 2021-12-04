@@ -261,7 +261,7 @@
             });
             this.adaptive = $('<dl>').appendTo(html);
             this.select.elm.on('change', () => {
-                if(this.select() === 1) this.adaptive.show(hideTime);
+                if(this.select() === '適応二値化処理') this.adaptive.show(hideTime);
                 else this.adaptive.hide(hideTime);
             }).trigger('change');
         }
