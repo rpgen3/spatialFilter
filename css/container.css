@@ -39,7 +39,8 @@ dl dd {
 }
 
 input,
-select {
+select,
+textarea {
 	max-width: 100%;
 }
 
